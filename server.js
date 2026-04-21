@@ -1,4 +1,4 @@
-{const express = require('express');
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -16,22 +16,23 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני מקל
+// שופט ג'מיני בגישה מקלה
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט במשחק "ארץ עיר". שחקן התבקש להביא מילה בקטגוריה "${category}" שמתחילה באות "${letter}".
-        השחקן כתב: "${answer}".
-        הגישה הכללית שלך חייבת להיות מקלה! כלומר, אם זה לא ממש לא מוחלט, תאשר את התשובה. 
-        קבל שגיאות כתיב, כתיב חסר/מלא, סלנג נפוץ או הטיות.
-        החזר אך ורק JSON תקין במבנה הבא: {"isValid": true/false, "reason": "הסבר קצר"}`;
+        const prompt = `אתה שופט סלחן מאוד במשחק "ארץ עיר".
+        הקטגוריה: "${category}", האות: "${letter}", התשובה: "${answer}".
+        הוראה קריטית: הגישה שלך חייבת להיות מקלה! אם זה לא טעות מוחלטת, תאשר. קבל שגיאות כתיב, כתיב חסר/מלא, סלנג נפוץ או הטיות (זכר/נקבה, יחיד/רבים).
+        החזר אך ורק JSON תקין במבנה הבא ללא טקסט נוסף: {"isValid": true/false, "reason": "הסבר קצר"}`;
         
         const result = await model.generateContent(prompt);
         let text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        res.json({ isValid: true, reason: "אישרנו מחמת הספק, השופט כרגע עסוק" });
+        // במקרה של שגיאה בחיבור ל-AI, מאשרים כדי לא לתקוע את המשחק
+        console.error(e);
+        res.json({ isValid: true, reason: "אישרנו מחמת הספק (השופט עסוק)" });
     }
 });
 
@@ -42,7 +43,7 @@ io.on('connection', (socket) => {
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
         const gameLetter = letters[Math.floor(Math.random() * letters.length)];
         
-        rooms[roomId] = { players: [], hostId: socket.id, letter: gameLetter, submittedCount: 0 };
+        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0 };
         socket.join(roomId);
         rooms[roomId].players.push({ id: socket.id, name: hostName, isHost: true });
         
@@ -59,10 +60,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('startGame', (roomId) => {
-        io.to(roomId).emit('gameStarted', rooms[roomId].letter);
+        if(rooms[roomId]) io.to(roomId).emit('gameStarted', rooms[roomId].letter);
     });
 
-    socket.on('submitScore', ({ roomId, correctCount, timeInSeconds }) => {
+    socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
         const room = rooms[roomId];
         if (!room) return;
         
@@ -70,35 +71,38 @@ io.on('connection', (socket) => {
         if (player) {
             player.correctCount = correctCount;
             player.time = timeInSeconds;
+            player.answers = answers;
             room.submittedCount++;
         }
 
-        // כשכולם מסיימים - חישוב תוצאות
+        // כשכולם מסיימים - חישוב תוצאות סופיות לפי הכללים שלך
         if (room.submittedCount === room.players.length) {
             const minTime = Math.min(...room.players.map(p => p.time));
             
             room.players.forEach(p => {
                 let score = p.correctCount * 10;
-                const excessRatio = (p.time - minTime) / minTime;
                 
-                // קנס על איטיות יתר (יותר מ-50%)
-                if (excessRatio > 0.50) {
-                    const penalties = Math.floor(excessRatio / 0.10); // על כל 10%
-                    score -= (penalties * 5);
+                if (minTime > 0) {
+                    const excessRatio = (p.time - minTime) / minTime;
+                    if (excessRatio > 0.50) {
+                        const penalties = Math.floor(excessRatio / 0.10);
+                        score -= (penalties * 5);
+                    }
                 }
                 p.finalScore = Math.max(0, score);
             });
 
-            // מיון מנצחים
+            // מיון: קודם לפי ציון, ואז לפי זמן במקרה של תיקו
             room.players.sort((a, b) => {
                 if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
                 return a.time - b.time;
             });
 
             io.to(roomId).emit('gameOver', room.players);
+            delete rooms[roomId]; // סגירת החדר בסיום
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server is running'));
+server.listen(PORT, () => console.log('Server is running on port ' + PORT));
