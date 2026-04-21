@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ארץ עיר של סבא עופר</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        /* כאן תדביק את כל העיצוב (CSS) מהקובץ הקודם שלנו במלואו */
+        :root { --primary: #4a90e2; --secondary: #f5a623; --success: #7ed321; --danger: #d0021b; --bg: #f0f4f8; --text: #333; }
+        body { font-family: sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .container { background: white; padding: 2rem; border-radius: 20px; width: 95%; max-width: 600px; text-align: center; }
+        .screen { display: none; } .active { display: block; }
+        input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 10px; font-size: 1.1rem; }
+        button { border: none; font-weight: bold; cursor: pointer; color: white; }
+        .btn-primary { background: var(--primary); } .btn-success { background: var(--success); } .btn-skip { background: #eee; color: #333; width: auto; }
+        .category-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+        ul { list-style-type: none; padding: 0; } li { background: #f9f9f9; padding: 10px; margin-bottom: 5px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="welcome" class="screen active">
+        <h1>ארץ עיר של סבא עופר</h1>
+        <input type="text" id="player-name" placeholder="השם שלך...">
+        <button class="btn-primary" onclick="createRoom()">צור חדר משחק</button>
+        <div id="join-section" style="margin-top:20px;">
+            <input type="text" id="room-code" placeholder="הכנס קוד חדר (אם קיבלת)">
+            <button class="btn-success" onclick="joinRoom()">הצטרף לחדר</button>
+        </div>
+    </div>
+
+    <div id="lobby" class="screen">
+        <h2>חדר המתנה</h2>
+        <p>קוד החדר שלכם: <strong id="display-room-code" style="font-size:1.5rem; color:var(--primary);"></strong></p>
+        <button class="btn-success" onclick="shareRoomWhatsApp()">שלח הזמנה בוואטסאפ 📱</button>
+        <h3>שחקנים מחוברים:</h3>
+        <ul id="players-list"></ul>
+        <button id="start-btn" class="btn-primary" style="display:none;" onclick="startGame()">התחל משחק לכולם!</button>
+        <p id="waiting-msg" style="display:none;">ממתין למנהל החדר שיתחיל את המשחק...</p>
+    </div>
+
+    <div id="countdown-screen" class="screen">
+        <h1 id="countdown-number" style="font-size: 6rem; color: var(--primary);">3</h1>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <h2 id="timer-display">זמן: 00:00</h2>
+        <h3 id="letter-header">אות: </h3>
+        <div id="categories-container"></div>
+        <button class="btn-primary" onclick="submitGame()">סיימתי!</button>
+    </div>
+
+    <div id="waiting-results" class="screen">
+        <h2>סיימת!</h2>
+        <p>ממתין ששאר השחקנים יסיימו את המשחק...</p>
+    </div>
+
+    <div id="results" class="screen">
+        <h2 id="winner-announcement" style="color: var(--secondary);"></h2>
+        <ul id="leaderboard"></ul>
+        <button class="btn-primary" onclick="location.reload()">חזור לראשי</button>
+    </div>
+</div>
+
+<script>
+    // ** עליך להדביק כאן את משתנה RAW_DATA הענק מהקוד הקודם! **
+    const RAW_DATA = { /* הדבק את המאגרים המלאים כאן */ };
+    
+    const DATA = {};
+    // שים לב לוודא שמשתנה DATA הומר נכון (כפי שעשינו בגרסה הקודמת)
+    
+    const CATEGORIES = [
+        { id: 'countries', label: 'מדינה' }, { id: 'localities', label: 'יישוב' },
+        { id: 'capitals', label: 'עיר בירה' }, { id: 'body_parts', label: 'איבר גוף' },
+        { id: 'foods', label: 'מאכל' }, { id: 'plants', label: 'צומח' },
+        { id: 'animals', label: 'חיות' }, { id: 'boys', label: 'בן' },
+        { id: 'girls', label: 'בת' }, { id: 'professions', label: 'מקצוע' }
+    ];
+
+    const socket = io();
+    let currentRoom = '';
+    let currentLetter = '';
+    let startTime;
+    let timerInterval;
+
+    // --- קריאת פרמטרים מכתובת ה-URL (אם הגיעו דרך וואטסאפ) ---
+    window.onload = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if(urlParams.has('room')) {
+            document.getElementById('room-code').value = urlParams.get('room');
+        }
+    };
+
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    function createRoom() {
+        const name = document.getElementById('player-name').value;
+        if (!name) return alert("הכנס שם!");
+        socket.emit('createRoom', name);
+    }
+
+    function joinRoom() {
+        const name = document.getElementById('player-name').value;
+        const room = document.getElementById('room-code').value.toUpperCase();
+        if (!name || !room) return alert("הכנס שם וקוד חדר!");
+        currentRoom = room;
+        socket.emit('joinRoom', { roomId: room, playerName: name });
+        showScreen('lobby');
+        document.getElementById('display-room-code').innerText = room;
+        document.getElementById('waiting-msg').style.display = 'block';
+    }
+
+    function shareRoomWhatsApp() {
+        const link = `${window.location.origin}?room=${currentRoom}`;
+        const text = `הצטרפו אליי למשחק ארץ עיר!\nהכנסו לקישור, המתינו בלובי, ואני אתחיל את המשחק לכולנו יחד:\n${link}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    socket.on('roomCreated', (data) => {
+        currentRoom = data.roomId;
+        document.getElementById('display-room-code').innerText = currentRoom;
+        document.getElementById('start-btn').style.display = 'block';
+        updateLobby(data.players);
+        showScreen('lobby');
+    });
+
+    socket.on('updatePlayers', (players) => updateLobby(players));
+
+    function updateLobby(players) {
+        const ul = document.getElementById('players-list');
+        ul.innerHTML = '';
+        players.forEach(p => {
+            const li = document.createElement('li');
+            li.innerText = p.name + (p.isHost ? ' 👑' : '');
+            ul.appendChild(li);
+        });
+    }
+
+    function startGame() { socket.emit('startGame', currentRoom); }
+
+    socket.on('gameStarted', (letter) => {
+        currentLetter = letter;
+        showScreen('countdown-screen');
+        let count = 3;
+        const iv = setInterval(() => {
+            count--;
+            if(count === 0) {
+                clearInterval(iv);
+                buildGameFields();
+                showScreen('game-screen');
+            } else {
+                document.getElementById('countdown-number').innerText = count;
+            }
+        }, 1000);
+    });
+
+    function buildGameFields() {
+        document.getElementById('letter-header').innerText = `האות: ${currentLetter}`;
+        const container = document.getElementById('categories-container');
+        container.innerHTML = '';
+        CATEGORIES.forEach(cat => {
+            container.innerHTML += `
+                <div class="category-row">
+                    <label>${cat.label}</label>
+                    <input type="text" id="input-${cat.id}">
+                    <button class="btn-skip" onclick="document.getElementById('input-${cat.id}').value='---'">דלג</button>
+                </div>`;
+        });
+        startTime = Date.now();
+        timerInterval = setInterval(() => {
+            const s = Math.floor((Date.now() - startTime)/1000);
+            document.getElementById('timer-display').innerText = `זמן: ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+        }, 1000);
+    }
+
+    async function submitGame() {
+        clearInterval(timerInterval);
+        showScreen('waiting-results');
+        const timeInSeconds = Math.floor((Date.now() - startTime) / 1000);
+        let correctCount = 0;
+
+        for (const cat of CATEGORIES) {
+            const val = document.getElementById('input-' + cat.id).value.trim();
+            if (val === "---" || val === "" || !val.startsWith(currentLetter)) continue;
+
+            // בדיקה מקומית
+            // (השתמש כאן בפונקציית isMatch וב-normalizeHebrew מהקובץ הקודם שלנו)
+            if (DATA[cat.id] && DATA[cat.id].includes(val)) {
+                correctCount++;
+            } else {
+                // אם המילה לא נמצאת במאגר, פונים לג'מיני דרך השרת שלנו
+                const res = await fetch('/api/ask-judge', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
+                });
+                const data = await res.json();
+                if (data.isValid) correctCount++;
+            }
+        }
+        
+        socket.emit('submitScore', { roomId: currentRoom, correctCount, timeInSeconds });
+    }
+
+    socket.on('gameOver', (leaderboard) => {
+        showScreen('results');
+        const winner = leaderboard[0];
+        document.getElementById('winner-announcement').innerText = `המנצח הוא ${winner.name}! 🏆`;
+        
+        const ul = document.getElementById('leaderboard');
+        ul.innerHTML = '';
+        leaderboard.forEach((p, idx) => {
+            ul.innerHTML += `<li>${idx+1}. <strong>${p.name}</strong> - ניקוד: ${p.finalScore} (זמן: ${p.time} שניות)</li>`;
+        });
+
+        // הכרזה קולית
+        const msg1 = new SpeechSynthesisUtterance(`המנצח הוא ${winner.name}`);
+        const msg2 = new SpeechSynthesisUtterance("יופי, הצלחה נאה בארץ עיר. אפשר לשחק שוב");
+        msg1.lang = 'he-IL'; msg2.lang = 'he-IL';
+        window.speechSynthesis.speak(msg1);
+        window.speechSynthesis.speak(msg2);
+    });
+</script>
+</body>
+</html>
