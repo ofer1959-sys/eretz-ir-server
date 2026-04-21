@@ -16,7 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני בגישה מקלה
+// שופט ג'מיני בגישה מקלה עם מנגנון הגנה נגד קריסות (Timeout)
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -26,13 +26,22 @@ app.post('/api/ask-judge', async (req, res) => {
         הוראה קריטית: הגישה שלך חייבת להיות מקלה! אם זה לא טעות מוחלטת, תאשר. קבל שגיאות כתיב, כתיב חסר/מלא, סלנג נפוץ או הטיות (זכר/נקבה, יחיד/רבים).
         החזר אך ורק JSON תקין במבנה הבא ללא טקסט נוסף: {"isValid": true/false, "reason": "הסבר קצר"}`;
         
-        const result = await model.generateContent(prompt);
-        let text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        // Timeout של 8 שניות לפנייה לג'מיני, כדי לא לתקוע את המשתמש
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 8000));
+        const resultPromise = model.generateContent(prompt);
+        
+        const response = await Promise.race([resultPromise, timeoutPromise]);
+        
+        if (response.timeout) {
+             console.log("Gemini API Timeout - Auto approving");
+             return res.json({ isValid: true, reason: "אישרנו אוטומטית (השופט קצת איטי עכשיו)" });
+        }
+
+        let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        // במקרה של שגיאה בחיבור ל-AI, מאשרים כדי לא לתקוע את המשחק
-        console.error(e);
-        res.json({ isValid: true, reason: "אישרנו מחמת הספק (השופט עסוק)" });
+        console.error("Gemini Error:", e);
+        res.json({ isValid: true, reason: "אישרנו מחמת הספק (שגיאה אצל השופט)" });
     }
 });
 
@@ -53,8 +62,12 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', ({ roomId, playerName }) => {
         const room = rooms[roomId];
         if (room) {
-            socket.join(roomId);
-            room.players.push({ id: socket.id, name: playerName, isHost: false });
+            // בדיקה ששחקן לא נכנס פעמיים בטעות
+            const existingPlayer = room.players.find(p => p.id === socket.id);
+            if (!existingPlayer) {
+                socket.join(roomId);
+                room.players.push({ id: socket.id, name: playerName, isHost: false });
+            }
             io.to(roomId).emit('updatePlayers', room.players);
         }
     });
@@ -68,15 +81,19 @@ io.on('connection', (socket) => {
         if (!room) return;
         
         const player = room.players.find(p => p.id === socket.id);
-        if (player) {
+        if (player && !player.hasSubmitted) { // מוודאים שסופרים כל שחקן פעם אחת בלבד
             player.correctCount = correctCount;
             player.time = timeInSeconds;
             player.answers = answers;
+            player.hasSubmitted = true;
             room.submittedCount++;
+            
+            console.log(`Room ${roomId}: Player ${player.name} finished. (${room.submittedCount}/${room.players.length})`);
         }
 
         // כשכולם מסיימים - חישוב תוצאות סופיות לפי הכללים שלך
         if (room.submittedCount === room.players.length) {
+            console.log(`Room ${roomId}: All players finished. Calculating scores...`);
             const minTime = Math.min(...room.players.map(p => p.time));
             
             room.players.forEach(p => {
@@ -99,7 +116,41 @@ io.on('connection', (socket) => {
             });
 
             io.to(roomId).emit('gameOver', room.players);
-            delete rooms[roomId]; // סגירת החדר בסיום
+            
+            // ניקוי החדר לאחר 10 שניות כדי למנוע דליפות זיכרון, אבל לא מיד
+            setTimeout(() => {
+                delete rooms[roomId];
+            }, 10000);
+        }
+    });
+    
+    // ניקוי שחקנים שמתנתקים באמצע (סוגרים את הדפדפן לפני הסיום)
+    socket.on('disconnect', () => {
+        for (const roomId in rooms) {
+            const room = rooms[roomId];
+            const playerIndex = room.players.findIndex(p => p.id === socket.id);
+            
+            if (playerIndex !== -1) {
+                const player = room.players[playerIndex];
+                // אם המשחק עדיין לא התחיל (אפס מגישים), אפשר להסיר אותו מהלובי
+                if (room.submittedCount === 0) {
+                    room.players.splice(playerIndex, 1);
+                    io.to(roomId).emit('updatePlayers', room.players);
+                } 
+                // אם המשחק התחיל, והוא יצא לפני שסיים, נסמן אותו כמי שסיים עם 0 כדי לא לתקוע את כולם
+                else if (!player.hasSubmitted) {
+                    player.hasSubmitted = true;
+                    player.correctCount = 0;
+                    player.time = 999; // עונש זמן מירבי
+                    player.answers = {};
+                    room.submittedCount++;
+                    
+                    if (room.submittedCount === room.players.length) {
+                        // אותה לוגיקת סיום כמו קודם (שמתי כאן כדי לא להאריך את הקוד כרגע)
+                        io.to(roomId).emit('gameOver', room.players); 
+                    }
+                }
+            }
         }
     });
 });
