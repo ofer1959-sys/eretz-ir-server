@@ -12,6 +12,10 @@
         h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 1rem; }
         .screen { display: none; } .active { display: block; }
         input[type="text"] { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box; }
+        
+        /* עיצוב מיוחד לתיבת השם כדי שלא יפספסו אותה */
+        #player-name { border: 2px solid var(--primary); background-color: #f4f9ff; font-weight: bold; text-align: center; }
+        
         button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; width: 100%; margin-top: 10px; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-success { background: var(--success); color: white; }
@@ -38,8 +42,6 @@
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
-        
-        .live-update-box { background: #fff8e1; border: 2px solid var(--secondary); border-radius: 10px; padding: 15px; margin-top: 20px; text-align: right; }
     </style>
 </head>
 <body>
@@ -48,7 +50,7 @@
     <div id="welcome" class="screen active">
         <h1>ארץ עיר של סבא עופר</h1>
         <p>הכניסו שם ונתחיל!</p>
-        <input type="text" id="player-name" placeholder="השם שלך...">
+        <input type="text" id="player-name" placeholder="הקלידו את השם שלכם כאן... (חובה)">
         
         <div id="solo-buttons">
             <button class="btn-primary" onclick="startSoloGame()">שחק לבד מול השעון</button>
@@ -84,7 +86,7 @@
     <div id="letter-screen" class="screen">
         <h2>האות שנבחרה היא:</h2>
         <div id="selected-letter" class="letter-display">א</div>
-        </div>
+    </div>
 
     <div id="game-screen" class="screen">
         <div class="timer" id="timer-display">זמן: 00:00</div>
@@ -95,15 +97,14 @@
 
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
+        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">בודק תשובות (זה ייקח מספר שניות)...</p>
         
-        <p style="color: #333; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
-        <p id="checking-status" style="font-weight: bold; color: var(--secondary); margin: 10px 0; font-size: 1rem;"></p>
+        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
         
-        <div class="live-update-box">
-            <strong style="color: var(--primary); font-size: 1.1rem;">שחקנים שסיימו את המשחק:</strong>
-            <ul id="finished-players-list" style="margin-top: 10px; font-size: 1rem; color: green; list-style: none;"></ul>
-            
-            <button id="force-end-btn" class="btn-danger" style="display:none; width: 100%; padding: 10px; border:none; border-radius: 8px; font-weight:bold; color:white; background:#d0021b; margin-top: 15px;" onclick="forceEndGame()">הצג תוצאות לכולם (דלג על מי שנתקע)</button>
+        <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
+            <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
+            <div id="host-updates-list" style="margin-top: 10px; font-size: 1rem;"></div>
+            <button id="force-end-btn" class="btn-danger" style="display:none; width: 100%; padding: 10px; border:none; border-radius: 8px; font-weight:bold; color:white; background:#d0021b; margin-top: 15px;" onclick="forceEndGame()">הצג תוצאות עכשיו לכולם (דלג על מי שנתקע)</button>
         </div>
     </div>
 
@@ -158,6 +159,8 @@
     let playerAnswers = {};
     let isMultiplayerMode = false;
     let hasSubmittedCurrentRound = false;
+    let lastCorrectCount = 0;
+    let lastTimeInSeconds = 0;
     const socket = io();
     let currentRoom = '';
     let isHost = false;
@@ -182,7 +185,23 @@
 
     socket.on('connect', () => {
         if (currentRoom && myName) {
-            socket.emit('joinRoom', { roomId: currentRoom, playerName: myName, isHostClaim: isHost });
+            socket.emit('joinRoom', { 
+                roomId: currentRoom, 
+                playerName: myName, 
+                isHostClaim: isHost 
+            });
+
+            const activeScreen = document.querySelector('.screen.active');
+            if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
+                setTimeout(() => {
+                    socket.emit('submitScore', { 
+                        roomId: currentRoom, 
+                        correctCount: lastCorrectCount, 
+                        timeInSeconds: lastTimeInSeconds, 
+                        answers: playerAnswers 
+                    });
+                }, 1000);
+            }
         }
     });
 
@@ -194,7 +213,11 @@
     function createRoom() {
         unlockAudio();
         myName = document.getElementById('player-name').value.trim();
-        if (!myName) return alert("הכנס שם!");
+        if (!myName) {
+            alert("שכחת להזין את השם שלך! אנא כתוב את שמך בתיבה העליונה.");
+            document.getElementById('player-name').focus();
+            return;
+        }
         isHost = true;
         socket.emit('createRoom', myName);
     }
@@ -203,7 +226,18 @@
         unlockAudio();
         myName = document.getElementById('player-name').value.trim();
         const room = document.getElementById('room-code').value.toUpperCase().trim();
-        if (!myName || !room) return alert("הכנס שם וקוד חדר!");
+        
+        if (!myName) {
+            alert("שכחת להזין את השם שלך! אנא כתוב את שמך בתיבה העליונה.");
+            document.getElementById('player-name').focus();
+            return;
+        }
+        if (!room) {
+            alert("אנא הכנס קוד חדר!");
+            document.getElementById('room-code').focus();
+            return;
+        }
+        
         currentRoom = room;
         isMultiplayerMode = true;
         isHost = false;
@@ -282,7 +316,11 @@
     function startSoloGame() {
         unlockAudio();
         myName = document.getElementById('player-name').value.trim();
-        if (!myName) return alert("הכנס שם!");
+        if (!myName) {
+            alert("שכחת להזין את השם שלך! אנא כתוב את שמך בתיבה העליונה.");
+            document.getElementById('player-name').focus();
+            return;
+        }
         
         isMultiplayerMode = false;
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
@@ -302,7 +340,6 @@
                 document.getElementById('selected-letter').innerText = currentLetter;
                 showScreen('letter-screen');
                 
-                // מעבר אוטומטי למשחק לאחר 2 שניות (ללא כפתור קדימה)
                 setTimeout(() => {
                     showGameFields();
                 }, 2000);
@@ -318,7 +355,8 @@
         const container = document.getElementById('categories-container');
         container.innerHTML = '';
         
-        document.getElementById('finished-players-list').innerHTML = '';
+        document.getElementById('host-updates').style.display = 'none';
+        document.getElementById('host-updates-list').innerHTML = '';
         hasSubmittedCurrentRound = false;
         
         CATEGORIES.forEach(cat => {
@@ -363,6 +401,13 @@
         });
     }
 
+    const fetchWithTimeout = (url, options, timeout = 8000) => {
+        return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+        ]);
+    };
+
     async function checkWordWithServer(catLabel, val) {
         try {
             const res = await fetch('/api/ask-judge', {
@@ -379,25 +424,23 @@
     }
 
     async function submitGame() {
-        unlockAudio(); // משחרר קול לאייפון
+        unlockAudio(); 
         clearInterval(timerInterval);
         
         const submitBtn = document.getElementById('submit-btn');
         submitBtn.disabled = true;
         submitBtn.innerText = "מעבד תוצאות...";
 
-        const timeInSeconds = Math.floor((Date.now() - startTime) / 1000);
-        let correctCount = 0;
+        lastTimeInSeconds = Math.floor((Date.now() - startTime) / 1000);
+        lastCorrectCount = 0;
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
         
-        // מודיעים מיד לכולם שהשחקן סיים (עוד לפני הבדיקה)
         if (isMultiplayerMode) {
             socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
         }
 
-        // לולאה שמבטיחה בדיקה בטוחה שלא תקרוס
         for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
             const normalizedVal = normalizeHebrew(val);
@@ -411,41 +454,41 @@
             } else {
                 if (isMatch(val, DATA[cat.id])) {
                     isCorrect = true;
-                    correctCount++;
+                    lastCorrectCount++;
                 } else {
                     statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
                     const judgeRes = await checkWordWithServer(cat.label, val);
                     isCorrect = judgeRes.isValid;
                     feedback = judgeRes.reason;
-                    if (isCorrect) correctCount++;
+                    if (isCorrect) lastCorrectCount++;
                 }
             }
             playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
         }
         
         hasSubmittedCurrentRound = true;
-        statusText.innerText = ""; // מוחק את טקסט הבדיקה בסיום
+        statusText.innerText = ""; 
 
         if (isMultiplayerMode) {
-            socket.emit('submitScore', { roomId: currentRoom, correctCount: correctCount, timeInSeconds: timeInSeconds, answers: playerAnswers });
+            socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
         } else {
             const p = { 
                 name: myName, 
-                score: correctCount * 10, 
-                time: timeInSeconds,
+                score: lastCorrectCount * 10, 
+                time: lastTimeInSeconds,
                 answers: playerAnswers
             };
             showFinalResults([p], p);
         }
     }
 
-    // קבלת עדכון כשמישהו לחץ "סיימתי"
     socket.on('playerAnnouncedFinish', (playerName) => {
-        const list = document.getElementById('finished-players-list');
+        document.getElementById('host-updates').style.display = 'block';
+        const list = document.getElementById('host-updates-list');
         if (list) {
             const existingId = "status-" + playerName.replace(/\s+/g, '-');
             if (!document.getElementById(existingId)) {
-                list.innerHTML += `<li id="${existingId}">✅ <strong>${playerName}</strong> סיים/ה את המשחק!</li>`;
+                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ <strong>${playerName}</strong> סיים/ה את המשחק!</div>`;
             }
         }
         if (isHost) {
@@ -540,7 +583,6 @@
         window.finalLeaderboard = leaderboard;
     }
 
-    // הוספת פונקציה למשחק חוזר באותו חדר
     function playAgainInSameRoom() {
         if (isMultiplayerMode) {
             socket.emit('backToLobby', currentRoom);
@@ -549,7 +591,6 @@
         }
     }
 
-    // קבלת האות לחזור ללובי מהשרת
     socket.on('returnToLobby', (data) => {
         currentLetter = data.letter;
         showScreen('lobby');
