@@ -5,8 +5,9 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
-process.on('uncaughtException', (err) => console.error('Uncaught:', err));
-process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
+// הגנה נגד קריסות שרת פתאומיות
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
+process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +20,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
+// שופט ג'מיני (עם חסם זמן בטוח)
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -31,8 +33,8 @@ app.post('/api/ask-judge', async (req, res) => {
         3. מותרת שגיאת כתיב של אות אחת (בתנאי שזו לא האות הראשונה).
         4. התעלם מעודף או חוסר באותיות 'א' ו-'י'.
         5. אם המילה קשורה לנושא ויש סיכוי טוב שהיא עונה להגדרה - אשר.
-        6. בקטגוריות "שם של בן/בת" - אשר שמות לועזיים נפוצים.
-        7. בקטגוריות "איבר גוף", "צומח", "מאכל" - אשר גם שם מדעי או לועזי מקובל.
+        6. בקטגוריות "שם של בן" או "שם של בת" - אשר שמות לועזיים נפוצים.
+        7. בקטגוריות "איבר גוף", "צומח", ו"מאכל" - אשר גם שם מדעי או לועזי מקובל.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
         {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
@@ -40,7 +42,7 @@ app.post('/api/ask-judge', async (req, res) => {
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
-        }, 5500));
+        }, 6000));
         
         const result = model.generateContent(prompt).then(r => {
             isResolved = true; return r;
@@ -50,7 +52,8 @@ app.post('/api/ask-judge', async (req, res) => {
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout || response.error) return res.json({ isValid: true, reason: "אושר (השופט מתעכב)" });
+        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט מתעכב)" });
+        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
@@ -107,14 +110,14 @@ io.on('connection', (socket) => {
         const existingPlayer = room.players.find(p => p.name === playerName);
         if (existingPlayer) {
             existingPlayer.id = socket.id; 
-            if (isHostClaim) existingPlayer.isHost = true;
+            if (isHostClaim) existingPlayer.isHost = true; // שמירה על זהות המנהל
         } else {
-            const hasHost = room.players.some(p => p.isHost);
-            room.players.push({ id: socket.id, name: playerName, isHost: isHostClaim || !hasHost, hasSubmitted: false });
+            room.players.push({ id: socket.id, name: playerName, isHost: isHostClaim, hasSubmitted: false });
         }
         
         socket.join(roomId);
-        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: room.players.find(p=>p.name===playerName).isHost });
+        const myPlayer = room.players.find(p => p.name === playerName);
+        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost });
         io.to(roomId).emit('updatePlayers', room.players);
     });
 
@@ -158,6 +161,7 @@ io.on('connection', (socket) => {
         if (!room) return;
         const host = room.players.find(p => p.id === socket.id);
         if (host && host.isHost) {
+            // אם המנהל עוד לא שלח, נשמור את מה שהספיק לבדוק עד כה
             if (!host.hasSubmitted && data.forceHostSubmit) {
                 host.correctCount = data.myCorrectCount || 0;
                 host.time = data.myTime || 999;
@@ -206,7 +210,7 @@ io.on('connection', (socket) => {
                             rooms[roomId].submittedCount++;
                             if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId);
                         }
-                    }, 120000); 
+                    }, 60000); // מחכה דקה אחת וקוטע את ההמתנה
                 }
             }
         }
