@@ -16,7 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני בגישה מקלה
+// שופט ג'מיני
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -133,6 +133,13 @@ io.on('connection', (socket) => {
             player.answers = answers;
             player.hasSubmitted = true;
             room.submittedCount++;
+            
+            // משדר עדכון שחקן סיים
+            io.to(roomId).emit('playerFinished', {
+                playerName: player.name,
+                submittedCount: room.submittedCount,
+                totalPlayers: room.players.length
+            });
         }
 
         if (room.submittedCount === room.players.length) {
@@ -151,7 +158,6 @@ io.on('connection', (socket) => {
                     room.players.splice(playerIndex, 1);
                     io.to(roomId).emit('updatePlayers', room.players);
                 } else if (room.gameStarted && !player.hasSubmitted) {
-                    // המערכת תחכה לשחקן שעתיים (או עד שיגיש) כדי לא לפסול אותו סתם על ניתוק מהאינטרנט
                     setTimeout(() => {
                         if (rooms[roomId] && !player.hasSubmitted) {
                             player.hasSubmitted = true;
@@ -159,11 +165,18 @@ io.on('connection', (socket) => {
                             player.time = 999; 
                             player.answers = {};
                             rooms[roomId].submittedCount++;
+                            
+                            io.to(roomId).emit('playerFinished', {
+                                playerName: player.name,
+                                submittedCount: rooms[roomId].submittedCount,
+                                totalPlayers: rooms[roomId].players.length
+                            });
+                            
                             if (rooms[roomId].submittedCount === rooms[roomId].players.length) {
                                 calculateAndSendResults(roomId);
                             }
                         }
-                    }, 120000); // המתנה של 2 דקות
+                    }, 120000); // מחכה 2 דקות
                 }
             }
         }
