@@ -9,7 +9,8 @@
         :root { --primary: #4a90e2; --secondary: #f5a623; --success: #7ed321; --danger: #d0021b; --bg: #f0f4f8; --text: #333; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; direction: rtl;}
         .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; margin: 20px 0;}
-        h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 1rem; }
+        h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 0.5rem; }
+        .version-badge { font-size: 0.5em; color: white; background-color: var(--secondary); padding: 5px 10px; border-radius: 20px; vertical-align: middle;}
         .screen { display: none; } .active { display: block; }
         input[type="text"] { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box; }
         button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; width: 100%; margin-top: 10px; }
@@ -39,8 +40,8 @@
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
 
-        /* עיצוב חלונית התראות קופצות */
-        #live-notifications { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
+        /* חלונית התראות רחפת יפהפייה */
+        #live-notifications { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; width: 90%; max-width: 400px;}
     </style>
 </head>
 <body>
@@ -49,7 +50,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר של סבא עופר</h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה 2</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -98,9 +99,8 @@
 
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
-        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">מכין תשובות (זה ייקח מספר שניות)...</p>
-        
-        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
+        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות נבדקות כעת...</p>
+        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
@@ -406,7 +406,7 @@
     async function checkWordWithServer(catLabel, val) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5500); // מקסימום 5.5 שניות
+            const timeoutId = setTimeout(() => controller.abort(), 5500);
             
             const res = await fetch('/api/ask-judge', {
                 method: 'POST',
@@ -442,7 +442,6 @@
             socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
         }
 
-        // בדיקה טורית ובטוחה
         for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
             const normalizedVal = normalizeHebrew(val);
@@ -479,9 +478,8 @@
         }
     }
 
-    // קבלת עדכון ממרחף לכל השחקנים כשמישהו מסיים להקליד
     socket.on('playerAnnouncedFinish', (playerName) => {
-        showNotification(`🔔 השחקן/ית <strong>${playerName}</strong> סיים/ה את המשחק!`);
+        showNotification(`🔔 <strong>${playerName}</strong> סיימ/ה את המשחק!`);
     });
 
     socket.on('playerFinishedStatus', (data) => {
@@ -491,14 +489,14 @@
         
         if (data.submittedCount >= data.totalPlayers) {
             statusText.innerText = "כולם סיימו! מעבד תוצאות...";
-        } else if (statusText.innerText.includes('הבדיקה הסתיימה')) {
-            statusText.innerHTML = `הבדיקה הסתיימה! ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
+        } else if (hasSubmittedCurrentRound) {
+            statusText.innerHTML = `הבדיקה שלך הסתיימה!<br>ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
         }
         
         if (list) {
             const existingId = "status-" + data.playerName.replace(/\s+/g, '-');
             if (!document.getElementById(existingId)) {
-                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ השחקן/ית <strong>${data.playerName}</strong> המתין/ה לתוצאות</div>`;
+                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ <strong>${data.playerName}</strong> סיים/ה את הבדיקה</div>`;
             }
         }
 
@@ -509,7 +507,6 @@
 
     function forceEndGame() {
         if (confirm("האם אתה בטוח שברצונך לסיים את המשחק עבור כולם עכשיו ולהציג תוצאות? (מי שלא סיים יקבל 0 נקודות)")) {
-            // שולחים את התוצאות של המנהל יחד עם הבקשה לסיים
             socket.emit('forceEndGame', { 
                 roomId: currentRoom, 
                 forceHostSubmit: !hasSubmittedCurrentRound, 
