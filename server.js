@@ -16,6 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
+// שופט ג'מיני בגישה מקלה 
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -34,14 +35,45 @@ app.post('/api/ask-judge', async (req, res) => {
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
         {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
         
-        const result = await model.generateContent(prompt);
-        let text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 8000));
+        const resultPromise = model.generateContent(prompt);
+        const response = await Promise.race([resultPromise, timeoutPromise]);
+        
+        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט איטי)" });
+
+        let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        console.error("Gemini Error:", e.message);
         res.json({ isValid: true, reason: "אושר מחמת הספק" });
     }
 });
+
+function calculateAndSendResults(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
+    
+    const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
+    
+    room.players.forEach(p => {
+        let score = p.correctCount * 10;
+        if (minTime > 0 && minTime !== Infinity && p.time < 999) {
+            const excessRatio = (p.time - minTime) / minTime;
+            if (excessRatio > 0.50) {
+                const penalties = Math.floor(excessRatio / 0.10);
+                score -= (penalties * 5);
+            }
+        }
+        p.finalScore = Math.max(0, score);
+    });
+
+    room.players.sort((a, b) => {
+        if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+        return a.time - b.time;
+    });
+
+    io.to(roomId).emit('gameOver', room.players);
+    setTimeout(() => { delete rooms[roomId]; }, 10000);
+}
 
 io.on('connection', (socket) => {
     socket.on('createRoom', (hostName) => {
@@ -49,37 +81,48 @@ io.on('connection', (socket) => {
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
         const gameLetter = letters[Math.floor(Math.random() * letters.length)];
         
-        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0 };
+        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
         socket.join(roomId);
         rooms[roomId].players.push({ id: socket.id, name: hostName, isHost: true, hasSubmitted: false });
         
         socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players });
     });
 
-    socket.on('joinRoom', ({ roomId, playerName }) => {
-        const room = rooms[roomId];
-        if (room) {
-            const existingPlayer = room.players.find(p => p.id === socket.id);
-            if (!existingPlayer) {
-                socket.join(roomId);
-                room.players.push({ id: socket.id, name: playerName, isHost: false, hasSubmitted: false });
-            }
-            io.to(roomId).emit('updatePlayers', room.players);
-        } else {
-            socket.emit('gameError', 'החדר לא קיים. ייתכן שהמשחק כבר הסתיים.');
+    socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
+        let room = rooms[roomId];
+        
+        // מנגנון התאוששות קריסות חכם: אם החדר נמחק בגלל השרת, נקים אותו מחדש!
+        if (!room) {
+            const letters = "אבגדהזחטיכלמנסעפצקרשת";
+            const gameLetter = letters[Math.floor(Math.random() * letters.length)];
+            rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
+            room = rooms[roomId];
         }
+
+        const existingPlayer = room.players.find(p => p.name === playerName);
+        if (existingPlayer) {
+            existingPlayer.id = socket.id; 
+            if (isHostClaim) existingPlayer.isHost = true;
+        } else {
+            const hasHost = room.players.some(p => p.isHost);
+            room.players.push({ id: socket.id, name: playerName, isHost: isHostClaim || !hasHost, hasSubmitted: false });
+        }
+        
+        socket.join(roomId);
+        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: room.players.find(p=>p.name===playerName).isHost });
+        io.to(roomId).emit('updatePlayers', room.players);
     });
 
     socket.on('startGame', (roomId) => {
-        if(rooms[roomId]) io.to(roomId).emit('gameStarted', rooms[roomId].letter);
+        if(rooms[roomId]) {
+            rooms[roomId].gameStarted = true;
+            io.to(roomId).emit('gameStarted', rooms[roomId].letter);
+        }
     });
 
     socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) {
-            socket.emit('gameError', 'השרת הופעל מחדש והחדר אבד. נאלץ להתחיל משחק חדש.');
-            return;
-        }
+        if (!room) return;
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
@@ -91,27 +134,7 @@ io.on('connection', (socket) => {
         }
 
         if (room.submittedCount === room.players.length) {
-            const minTime = Math.min(...room.players.map(p => p.time));
-            
-            room.players.forEach(p => {
-                let score = p.correctCount * 10;
-                if (minTime > 0 && p.time !== 999) {
-                    const excessRatio = (p.time - minTime) / minTime;
-                    if (excessRatio > 0.50) {
-                        const penalties = Math.floor(excessRatio / 0.10);
-                        score -= (penalties * 5);
-                    }
-                }
-                p.finalScore = Math.max(0, score);
-            });
-
-            room.players.sort((a, b) => {
-                if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
-                return a.time - b.time;
-            });
-
-            io.to(roomId).emit('gameOver', room.players);
-            setTimeout(() => { delete rooms[roomId]; }, 10000);
+            calculateAndSendResults(roomId);
         }
     });
     
@@ -122,10 +145,8 @@ io.on('connection', (socket) => {
             
             if (playerIndex !== -1) {
                 const player = room.players[playerIndex];
-                if (room.submittedCount === 0) {
-                    room.players.splice(playerIndex, 1);
-                    io.to(roomId).emit('updatePlayers', room.players);
-                } else if (!player.hasSubmitted) {
+                if (room.gameStarted && !player.hasSubmitted) {
+                    // שחרור תקיעות: אם מישהו התנתק באמצע המשחק, מגישים עבורו ציון 0
                     player.hasSubmitted = true;
                     player.correctCount = 0;
                     player.time = 999; 
@@ -133,7 +154,7 @@ io.on('connection', (socket) => {
                     room.submittedCount++;
                     
                     if (room.submittedCount === room.players.length) {
-                        io.to(roomId).emit('gameOver', room.players); 
+                        calculateAndSendResults(roomId);
                     }
                 }
             }
