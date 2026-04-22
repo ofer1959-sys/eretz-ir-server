@@ -38,7 +38,6 @@
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
-        #host-updates { margin-top: 20px; font-size: 1.1rem; color: var(--secondary); text-align: right; }
     </style>
 </head>
 <body>
@@ -95,9 +94,14 @@
 
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
-        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0;">בודק תשובות (זה ייקח מספר שניות)...</p>
-        <p style="color: #666;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
-        <div id="host-updates"></div>
+        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">בודק תשובות (זה ייקח מספר שניות)...</p>
+        
+        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
+        
+        <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
+            <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים למנהל החדר:</strong>
+            <div id="host-updates-list" style="margin-top: 10px; font-size: 1rem;"></div>
+        </div>
     </div>
 
     <div id="results" class="screen">
@@ -337,13 +341,6 @@
         });
     }
 
-    const fetchWithTimeout = (url, options, timeout = 8000) => {
-        return Promise.race([
-            fetch(url, options),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
-        ]);
-    };
-
     async function submitGame() {
         clearInterval(timerInterval);
         
@@ -356,8 +353,7 @@
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
-        
-        // בדיקה טלסקופית (טורית) כדי לא לחנוק את הדפדפן והשרת
+
         for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
             const normalizedVal = normalizeHebrew(val);
@@ -375,25 +371,26 @@
                 } else {
                     statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
                     try {
-                        const res = await fetchWithTimeout('/api/ask-judge', {
+                        const res = await fetch('/api/ask-judge', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
-                        }, 8000);
+                        });
+                        if (!res.ok) throw new Error('Network response was not ok');
                         const aiData = await res.json();
                         isCorrect = aiData.isValid;
                         feedback = aiData.reason || '';
                         if (isCorrect) correctCount++;
                     } catch(e) {
                         isCorrect = true;
-                        feedback = "אושר מחמת הספק (עומס על השופט)";
+                        feedback = "אושר מחמת הספק (עומס)";
                         correctCount++;
                     }
                 }
             }
             playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
         }
-
+        
         statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
 
         if (isMultiplayerMode) {
@@ -408,12 +405,14 @@
             showFinalResults([p], p);
         }
     }
-    
-    // קבלת עדכון כששחקן אחר סיים את הבדיקה
+
     socket.on('playerFinished', (data) => {
         if (isHost) {
-            const updatesDiv = document.getElementById('host-updates');
-            updatesDiv.innerHTML += `<div style="margin-top: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין (${data.submittedCount}/${data.totalPlayers})</div>`;
+            document.getElementById('host-updates').style.display = 'block';
+            const list = document.getElementById('host-updates-list');
+            if (list) {
+                list.innerHTML += `<div style="margin-bottom: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין (${data.submittedCount}/${data.totalPlayers})</div>`;
+            }
         }
     });
 
