@@ -96,7 +96,7 @@
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">בודק תשובות (זה ייקח מספר שניות)...</p>
         
-        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
+        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
@@ -162,6 +162,16 @@
     let currentRoom = '';
     let isHost = false;
 
+    // הפעלת הקול באייפון בחתימה ראשונה - פותר את בעיית השתקת השמע!
+    function unlockAudio() {
+        if (!window.audioUnlocked) {
+            const silentUtter = new SpeechSynthesisUtterance('');
+            silentUtter.volume = 0;
+            window.speechSynthesis.speak(silentUtter);
+            window.audioUnlocked = true;
+        }
+    }
+
     window.onload = () => {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('room')) {
@@ -198,6 +208,7 @@
     }
 
     function createRoom() {
+        unlockAudio();
         const name = document.getElementById('player-name').value.trim();
         if (!name) return alert("הכנס שם!");
         isHost = true;
@@ -205,6 +216,7 @@
     }
 
     function joinRoom() {
+        unlockAudio();
         const name = document.getElementById('player-name').value.trim();
         const room = document.getElementById('room-code').value.toUpperCase().trim();
         if (!name || !room) return alert("הכנס שם וקוד חדר!");
@@ -239,8 +251,8 @@
         currentRoom = data.roomId;
         isHost = data.isHost;
 
-        const activeScreen = document.querySelector('.screen.active').id;
-        if (activeScreen === 'game-screen' || activeScreen === 'waiting-results' || activeScreen === 'results' || activeScreen === 'countdown-screen') {
+        const activeScreen = document.querySelector('.screen.active');
+        if (activeScreen && (activeScreen.id === 'game-screen' || activeScreen.id === 'waiting-results' || activeScreen.id === 'results' || activeScreen.id === 'countdown-screen')) {
             return;
         }
 
@@ -273,6 +285,7 @@
     }
 
     function startGameForAll() {
+        unlockAudio();
         document.querySelector('#host-controls button').disabled = true;
         socket.emit('startGame', currentRoom);
     }
@@ -283,6 +296,7 @@
     });
 
     function startSoloGame() {
+        unlockAudio();
         const name = document.getElementById('player-name').value.trim();
         if (!name) return alert("הכנס שם!");
         
@@ -361,27 +375,43 @@
         });
     }
 
-    const fetchWithTimeout = (url, options, timeout = 8000) => {
-        return Promise.race([
-            fetch(url, options),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
-        ]);
-    };
+    // AbortController סופר בטוח שחותך את ג'מיני בדיוק אחרי 6 שניות 
+    async function checkWordWithServer(catLabel, val) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+            
+            const res = await fetch('/api/ask-judge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category: catLabel, letter: currentLetter, answer: val }),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!res.ok) throw new Error('HTTP status error');
+            const data = await res.json();
+            return { isValid: !!data.isValid, reason: data.reason || '' };
+        } catch(e) {
+            return { isValid: true, reason: "אושר מחמת הספק (תקשורת)" };
+        }
+    }
 
     async function submitGame() {
-        clearInterval(timerInterval);
+        unlockAudio(); // משחרר את הקול באייפון ברגע שלוחצים על סיימתי!
         
+        clearInterval(timerInterval);
         const submitBtn = document.getElementById('submit-btn');
         submitBtn.disabled = true;
         submitBtn.innerText = "מעבד תוצאות...";
 
         lastTimeInSeconds = Math.floor((Date.now() - startTime) / 1000);
         lastCorrectCount = 0;
-        hasSubmittedCurrentRound = true;
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
 
+        // לולאה טורית - בודקת מילה אחר מילה בביטחון מוחלט
         for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
             const normalizedVal = normalizeHebrew(val);
@@ -398,26 +428,16 @@
                     lastCorrectCount++;
                 } else {
                     statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
-                    try {
-                        const res = await fetchWithTimeout('/api/ask-judge', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
-                        }, 8000);
-                        const aiData = await res.json();
-                        isCorrect = aiData.isValid;
-                        feedback = aiData.reason || '';
-                        if (isCorrect) lastCorrectCount++;
-                    } catch(e) {
-                        isCorrect = true;
-                        feedback = "אושר מחמת הספק";
-                        lastCorrectCount++;
-                    }
+                    const judgeRes = await checkWordWithServer(cat.label, val);
+                    isCorrect = judgeRes.isValid;
+                    feedback = judgeRes.reason;
+                    if (isCorrect) lastCorrectCount++;
                 }
             }
             playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
         }
         
+        hasSubmittedCurrentRound = true;
         statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
 
         if (isMultiplayerMode) {
@@ -434,7 +454,6 @@
     }
 
     socket.on('playerFinished', (data) => {
-        // מציג לכל שחקן שנמצא במסך המתנה מי סיים ומי חסר
         document.getElementById('host-updates').style.display = 'block';
         const list = document.getElementById('host-updates-list');
         const statusText = document.getElementById('checking-status');
@@ -453,7 +472,6 @@
             }
         }
 
-        // חשיפת כפתור סיום כוחני למנהל התחרות
         if (isHost && data.submittedCount < data.totalPlayers) {
             document.getElementById('force-end-btn').style.display = 'inline-block';
         }
@@ -461,6 +479,11 @@
 
     function forceEndGame() {
         if (confirm("האם אתה בטוח שברצונך לסיים את המשחק עבור כולם עכשיו ולהציג תוצאות? (מי שלא סיים יקבל 0 נקודות)")) {
+            // אם המנהל עדיין בודק תוצאות בעצמו, נגיש עבורו את מה שיש עד כה
+            if (!hasSubmittedCurrentRound && document.getElementById('submit-btn').disabled) {
+                socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
+                hasSubmittedCurrentRound = true;
+            }
             socket.emit('forceEndGame', currentRoom);
         }
     }
