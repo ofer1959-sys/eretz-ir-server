@@ -99,7 +99,7 @@
         <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
-            <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים למנהל החדר:</strong>
+            <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים חיים:</strong>
             <div id="host-updates-list" style="margin-top: 10px; font-size: 1rem;"></div>
         </div>
     </div>
@@ -154,6 +154,9 @@
     let timerInterval;
     let playerAnswers = {};
     let isMultiplayerMode = false;
+    let hasSubmittedCurrentRound = false;
+    let lastCorrectCount = 0;
+    let lastTimeInSeconds = 0;
     const socket = io();
     let currentRoom = '';
     let isHost = false;
@@ -173,6 +176,19 @@
                 playerName: document.getElementById('player-name').value, 
                 isHostClaim: isHost 
             });
+
+            // חסינות לניתוקי שרת - אם השרת עשה ריסטרט ושכח שסיימנו, נזכיר לו
+            const activeScreen = document.querySelector('.screen.active');
+            if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
+                setTimeout(() => {
+                    socket.emit('submitScore', { 
+                        roomId: currentRoom, 
+                        correctCount: lastCorrectCount, 
+                        timeInSeconds: lastTimeInSeconds, 
+                        answers: playerAnswers 
+                    });
+                }, 1000);
+            }
         }
     });
 
@@ -299,6 +315,10 @@
         const container = document.getElementById('categories-container');
         container.innerHTML = '';
         
+        document.getElementById('host-updates').style.display = 'none';
+        document.getElementById('host-updates-list').innerHTML = '';
+        hasSubmittedCurrentRound = false;
+        
         CATEGORIES.forEach(cat => {
             const div = document.createElement('div');
             div.className = 'category-row';
@@ -341,6 +361,13 @@
         });
     }
 
+    const fetchWithTimeout = (url, options, timeout = 8000) => {
+        return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+        ]);
+    };
+
     async function submitGame() {
         clearInterval(timerInterval);
         
@@ -348,8 +375,9 @@
         submitBtn.disabled = true;
         submitBtn.innerText = "מעבד תוצאות...";
 
-        const timeInSeconds = Math.floor((Date.now() - startTime) / 1000);
-        let correctCount = 0;
+        lastTimeInSeconds = Math.floor((Date.now() - startTime) / 1000);
+        lastCorrectCount = 0;
+        hasSubmittedCurrentRound = true;
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
@@ -367,24 +395,24 @@
             } else {
                 if (isMatch(val, DATA[cat.id])) {
                     isCorrect = true;
-                    correctCount++;
+                    lastCorrectCount++;
                 } else {
                     statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
                     try {
-                        const res = await fetch('/api/ask-judge', {
+                        const res = await fetchWithTimeout('/api/ask-judge', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
-                        });
-                        if (!res.ok) throw new Error('Network response was not ok');
+                        }, 8000);
+                        if (!res.ok) throw new Error('Network error');
                         const aiData = await res.json();
                         isCorrect = aiData.isValid;
                         feedback = aiData.reason || '';
-                        if (isCorrect) correctCount++;
+                        if (isCorrect) lastCorrectCount++;
                     } catch(e) {
                         isCorrect = true;
-                        feedback = "אושר מחמת הספק (עומס)";
-                        correctCount++;
+                        feedback = "אושר מחמת הספק";
+                        lastCorrectCount++;
                     }
                 }
             }
@@ -394,12 +422,12 @@
         statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
 
         if (isMultiplayerMode) {
-            socket.emit('submitScore', { roomId: currentRoom, correctCount, timeInSeconds, answers: playerAnswers });
+            socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
         } else {
             const p = { 
                 name: document.getElementById('player-name').value, 
-                score: correctCount * 10, 
-                time: timeInSeconds,
+                score: lastCorrectCount * 10, 
+                time: lastTimeInSeconds,
                 answers: playerAnswers
             };
             showFinalResults([p], p);
@@ -407,11 +435,13 @@
     }
 
     socket.on('playerFinished', (data) => {
-        if (isHost) {
-            document.getElementById('host-updates').style.display = 'block';
-            const list = document.getElementById('host-updates-list');
-            if (list) {
-                list.innerHTML += `<div style="margin-bottom: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין (${data.submittedCount}/${data.totalPlayers})</div>`;
+        document.getElementById('host-updates').style.display = 'block';
+        const list = document.getElementById('host-updates-list');
+        if (list) {
+            const existingId = "status-" + data.playerName.replace(/\\s+/g, '-');
+            const existingEl = document.getElementById(existingId);
+            if (!existingEl) {
+                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין (${data.submittedCount}/${data.totalPlayers})</div>`;
             }
         }
     });
