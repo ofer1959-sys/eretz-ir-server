@@ -16,6 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
+// שופט ג'מיני בגישה מקלה
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -89,6 +90,7 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
         let room = rooms[roomId];
+        
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             const gameLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -145,14 +147,23 @@ io.on('connection', (socket) => {
             
             if (playerIndex !== -1) {
                 const player = room.players[playerIndex];
-                if (room.gameStarted && !player.hasSubmitted) {
-                    player.hasSubmitted = true;
-                    player.correctCount = 0;
-                    player.time = 999; 
-                    player.answers = {};
-                    room.submittedCount++;
-                    
-                    if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
+                if (!room.gameStarted) {
+                    room.players.splice(playerIndex, 1);
+                    io.to(roomId).emit('updatePlayers', room.players);
+                } else if (room.gameStarted && !player.hasSubmitted) {
+                    // המערכת תחכה לשחקן שעתיים (או עד שיגיש) כדי לא לפסול אותו סתם על ניתוק מהאינטרנט
+                    setTimeout(() => {
+                        if (rooms[roomId] && !player.hasSubmitted) {
+                            player.hasSubmitted = true;
+                            player.correctCount = 0;
+                            player.time = 999; 
+                            player.answers = {};
+                            rooms[roomId].submittedCount++;
+                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) {
+                                calculateAndSendResults(roomId);
+                            }
+                        }
+                    }, 120000); // המתנה של 2 דקות
                 }
             }
         }
@@ -160,4 +171,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server is running'));
+server.listen(PORT, () => console.log('Server is running on port ' + PORT));
