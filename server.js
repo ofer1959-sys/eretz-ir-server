@@ -16,7 +16,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני
+// שופט ג'מיני (כולל מנגנון הגנה נגד קריסות של 8 שניות)
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -35,11 +35,23 @@ app.post('/api/ask-judge', async (req, res) => {
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
         {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
         
-        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 8000));
-        const resultPromise = model.generateContent(prompt);
-        const response = await Promise.race([resultPromise, timeoutPromise]);
+        let isResolved = false;
+        const timeout = new Promise((resolve) => setTimeout(() => {
+            if (!isResolved) resolve({ timeout: true });
+        }, 8000));
         
-        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט איטי)" });
+        const result = model.generateContent(prompt).then(r => {
+            isResolved = true;
+            return r;
+        }).catch(e => {
+            isResolved = true;
+            return { error: true };
+        });
+        
+        const response = await Promise.race([result, timeout]);
+        
+        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט התעכב)" });
+        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
@@ -90,7 +102,6 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
         let room = rooms[roomId];
-        
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             const gameLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -134,7 +145,7 @@ io.on('connection', (socket) => {
             player.hasSubmitted = true;
             room.submittedCount++;
             
-            // משדר עדכון שחקן סיים
+            // עדכון כל החדר כששחקן מסיים
             io.to(roomId).emit('playerFinished', {
                 playerName: player.name,
                 submittedCount: room.submittedCount,
@@ -171,12 +182,12 @@ io.on('connection', (socket) => {
                                 submittedCount: rooms[roomId].submittedCount,
                                 totalPlayers: rooms[roomId].players.length
                             });
-                            
+
                             if (rooms[roomId].submittedCount === rooms[roomId].players.length) {
                                 calculateAndSendResults(roomId);
                             }
                         }
-                    }, 120000); // מחכה 2 דקות
+                    }, 120000); 
                 }
             }
         }
