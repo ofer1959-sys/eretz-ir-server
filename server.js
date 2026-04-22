@@ -16,7 +16,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני בגישה מקלה 
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -90,8 +89,6 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
         let room = rooms[roomId];
-        
-        // מנגנון התאוששות קריסות חכם: אם החדר נמחק בגלל השרת, נקים אותו מחדש!
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             const gameLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -122,7 +119,10 @@ io.on('connection', (socket) => {
 
     socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) return;
+        if (!room) {
+            socket.emit('gameError', 'השרת התאפס והחדר אבד. רעננו את הדף והתחילו משחק חדש.');
+            return;
+        }
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
@@ -146,16 +146,13 @@ io.on('connection', (socket) => {
             if (playerIndex !== -1) {
                 const player = room.players[playerIndex];
                 if (room.gameStarted && !player.hasSubmitted) {
-                    // שחרור תקיעות: אם מישהו התנתק באמצע המשחק, מגישים עבורו ציון 0
                     player.hasSubmitted = true;
                     player.correctCount = 0;
                     player.time = 999; 
                     player.answers = {};
                     room.submittedCount++;
                     
-                    if (room.submittedCount === room.players.length) {
-                        calculateAndSendResults(roomId);
-                    }
+                    if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
                 }
             }
         }
@@ -163,4 +160,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server is running on port ' + PORT));
+server.listen(PORT, () => console.log('Server is running'));
