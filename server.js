@@ -5,7 +5,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
-// הגנה נגד קריסות שרת פתאומיות
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
@@ -20,7 +19,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני - גרסה אכזרית, נוקשה וחסרת פשרות
+// שופט ג'מיני - קפדן ופוסל במקרה של ספק או שגיאה
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -28,11 +27,10 @@ app.post('/api/ask-judge', async (req, res) => {
         const prompt = `אתה שופט אכזר, נוקשה וחסר רחמים במשחק "ארץ עיר" בעברית.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה של השחקן: "${answer}".
         עליך לשפוט לפי כללי הברזל הבאים. כל חריגה גוררת פסילה מיידית:
-        1. שיוך מדויק לקטגוריה (קריטי!): המילה חייבת להיות בדיוק מה שהקטגוריה דורשת. "איבר גוף" חייב להיות איבר אנטומי פיזי. "עיר בירה" חייבת להיות עיר בירה רשמית. "צומח" חייב להיות צמח אמיתי. אם זה לא מתאים ב-100% - פסול!
-        2. אין לאשר תארים או פעלים: אם הקטגוריה היא שם עצם (כמו חי, צומח, דומם, איבר גוף, מקצוע), פסול מיד כל מילת תואר (כמו "נכלולי", "נחמד", "גדול") או פועל.
-        3. האות הראשונה: המילה התקנית חייבת להתחיל באות "${letter}". שגיאה באות הראשונה = פסול.
-        4. אין המצאות: פסול מיד מילים מומצאות, ג'יבריש או מילים שלא קיימות במילון העברי.
-        5. שגיאות כתיב קלות: מותר לאשר שגיאת כתיב קלה של אות אחת בלבד (רק באמצע או בסוף המילה) או חוסר/עודף של א/י, אך ורק אם ברור לחלוטין למה השחקן התכוון וזה מתאים לקטגוריה.
+        1. שיוך מדויק (קריטי!): המילה חייבת להיות בדיוק מה שהקטגוריה דורשת. אם הקטגוריה היא "איבר גוף", "מצקת" זו פסילה. אם זה "עיר בירה", "אילת" זו פסילה כי היא עיר רגילה. אם זה לא מתאים ב-100% - פסול!
+        2. האות הראשונה: התשובה חייבת להתחיל באות "${letter}". שגיאה באות הראשונה = פסול.
+        3. אין המצאות וביטויים: פסול מילים מומצאות או משפטים כמו "מה אתה אומר".
+        4. שגיאות כתיב קלות: מותר לאשר שגיאת כתיב קלה של אות אחת בלבד (רק באמצע או בסוף) או חוסר/עודף של א/י, רק אם ברור למה התכוון השחקן.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
         {"isValid": true/false, "reason": "הסבר קצר של 2-4 מילים"}`;
@@ -50,13 +48,14 @@ app.post('/api/ask-judge', async (req, res) => {
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט התעכב)" });
-        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
+        // כאן שינינו: במקרה של עומס או שגיאה - פוסלים!
+        if (response.timeout) return res.json({ isValid: false, reason: "נפסל (השופט לא ענה)" });
+        if (response.error) return res.json({ isValid: false, reason: "נפסל (שגיאת תקשורת)" });
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        res.json({ isValid: true, reason: "אושר מחמת הספק" });
+        res.json({ isValid: false, reason: "נפסל (תקלת מערכת)" });
     }
 });
 
@@ -208,7 +207,7 @@ io.on('connection', (socket) => {
                             rooms[roomId].submittedCount++;
                             if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId);
                         }
-                    }, 120000); 
+                    }, 60000); 
                 }
             }
         }
