@@ -5,6 +5,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
+// הגנה נגד קריסות שרת פתאומיות
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
@@ -19,6 +20,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
+// שופט ג'מיני (עם חסם זמן של 6 שניות)
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -35,12 +37,26 @@ app.post('/api/ask-judge', async (req, res) => {
         7. בקטגוריות "איבר גוף", "צומח", ו"מאכל" - אשר אם נכתב השם המדעי או הלועזי המקובל.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
-        {"isValid": true/false, "reason": "הסבר קצר"}`;
+        {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
         
-        const resultPromise = model.generateContent(prompt);
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000));
+        let isResolved = false;
+        const timeout = new Promise((resolve) => setTimeout(() => {
+            if (!isResolved) resolve({ timeout: true });
+        }, 6000));
         
-        const response = await Promise.race([resultPromise, timeoutPromise]);
+        const result = model.generateContent(prompt).then(r => {
+            isResolved = true;
+            return r;
+        }).catch(e => {
+            isResolved = true;
+            return { error: true };
+        });
+        
+        const response = await Promise.race([result, timeout]);
+        
+        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט התעכב)" });
+        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
+
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
@@ -72,7 +88,6 @@ function calculateAndSendResults(roomId) {
     });
 
     io.to(roomId).emit('gameOver', room.players);
-    // הסרנו את מחיקת החדר כדי שאפשר יהיה לשחק שוב!
 }
 
 io.on('connection', (socket) => {
@@ -118,48 +133,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // הכרזה מיידית ששחקן לחץ סיימתי
-    socket.on('announceFinish', ({ roomId, playerName }) => {
-        io.to(roomId).emit('playerAnnouncedFinish', playerName);
-    });
-
-    socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
-        const room = rooms[roomId];
-        if (!room) return;
-        
-        const player = room.players.find(p => p.id === socket.id);
-        if (player && !player.hasSubmitted) {
-            player.correctCount = correctCount;
-            player.time = timeInSeconds;
-            player.answers = answers;
-            player.hasSubmitted = true;
-            room.submittedCount++;
-        }
-
-        if (room.submittedCount >= room.players.length) {
-            calculateAndSendResults(roomId);
-        }
-    });
-
-    socket.on('forceEndGame', (roomId) => {
-        const room = rooms[roomId];
-        if (!room) return;
-        const player = room.players.find(p => p.id === socket.id);
-        if (player && player.isHost) {
-            room.players.forEach(p => {
-                if (!p.hasSubmitted) {
-                    p.hasSubmitted = true;
-                    p.correctCount = 0;
-                    p.time = 999;
-                    p.answers = {};
-                }
-            });
-            room.submittedCount = room.players.length;
-            calculateAndSendResults(roomId);
-        }
-    });
-
-    // חזרה ללובי למשחק נוסף באותו חדר
+    // כפתור הקסם: משחק נוסף באותו חדר
     socket.on('backToLobby', (roomId) => {
         const room = rooms[roomId];
         if (room) {
@@ -176,11 +150,71 @@ io.on('connection', (socket) => {
                 p.finalScore = 0;
             });
             
-            socket.emit('returnToLobby', { letter: room.letter, players: room.players });
-            io.to(roomId).emit('updatePlayers', room.players);
+            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players });
         }
     });
 
+    // חיווי חי לשחקנים
+    socket.on('announceFinish', ({ roomId, playerName }) => {
+        io.to(roomId).emit('playerAnnouncedFinish', playerName);
+    });
+
+    socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
+        const room = rooms[roomId];
+        if (!room) {
+            socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. רעננו את הדף והתחילו משחק חדש.');
+            return;
+        }
+        
+        const player = room.players.find(p => p.id === socket.id);
+        if (player && !player.hasSubmitted) {
+            player.correctCount = correctCount;
+            player.time = timeInSeconds;
+            player.answers = answers;
+            player.hasSubmitted = true;
+            room.submittedCount++;
+            
+            const waitingFor = room.players.filter(p => !p.hasSubmitted).map(p => p.name);
+            io.to(roomId).emit('playerFinishedStatus', {
+                playerName: player.name,
+                submittedCount: room.submittedCount,
+                totalPlayers: room.players.length,
+                waitingFor: waitingFor
+            });
+
+            if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
+        }
+    });
+
+    // סיום כוחני על ידי המנהל
+    socket.on('forceEndGame', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        const host = room.players.find(p => p.id === socket.id);
+        
+        if (host && host.isHost) {
+            // אם המנהל טרם הגיש, נשמור את התוצאות החלקיות שלו
+            if (!host.hasSubmitted && data.forceHostSubmit) {
+                host.correctCount = data.myCorrectCount || 0;
+                host.time = data.myTime || 999;
+                host.answers = data.myAnswers || {};
+                host.hasSubmitted = true;
+                room.submittedCount++;
+            }
+            
+            room.players.forEach(p => {
+                if (!p.hasSubmitted) {
+                    p.hasSubmitted = true;
+                    p.correctCount = 0;
+                    p.time = 999;
+                    p.answers = {};
+                    room.submittedCount++;
+                }
+            });
+            calculateAndSendResults(data.roomId);
+        }
+    });
+    
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
@@ -189,26 +223,25 @@ io.on('connection', (socket) => {
                 if (!room.gameStarted) {
                     room.players.splice(playerIndex, 1);
                     io.to(roomId).emit('updatePlayers', room.players);
-                } else {
-                    // אם המשחק התחיל והוא התנתק, מחכים 2 דקות
+                } else if (room.gameStarted && !room.players[playerIndex].hasSubmitted) {
                     setTimeout(() => {
-                        if (rooms[roomId] && !room.players[playerIndex].hasSubmitted) {
-                            room.players[playerIndex].hasSubmitted = true;
-                            room.players[playerIndex].correctCount = 0;
-                            room.players[playerIndex].time = 999;
-                            room.players[playerIndex].answers = {};
+                        if (rooms[roomId] && rooms[roomId].players[playerIndex] && !rooms[roomId].players[playerIndex].hasSubmitted) {
+                            rooms[roomId].players[playerIndex].hasSubmitted = true;
+                            rooms[roomId].players[playerIndex].correctCount = 0;
+                            rooms[roomId].players[playerIndex].time = 999; 
+                            rooms[roomId].players[playerIndex].answers = {};
                             rooms[roomId].submittedCount++;
-                            if (rooms[roomId].submittedCount >= rooms[roomId].players.length) calculateAndSendResults(roomId);
+                            
+                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) {
+                                calculateAndSendResults(roomId);
+                            }
                         }
-                    }, 120000);
+                    }, 120000); 
                 }
             }
-            
-            // מחיקת חדר רק אם כולם יצאו לגמרי
-            if(room.players.length === 0) delete rooms[roomId];
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server is running'));
+server.listen(PORT, () => console.log('Server is running on port ' + PORT));
