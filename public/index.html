@@ -48,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה יציבה</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה יציבה 3</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -99,7 +99,7 @@
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות נבדקות כעת...</p>
         
-        <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
+        <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
@@ -140,9 +140,14 @@
         professions: `אדריכל,אדריכלית,אגרונום,אגרונומית,אונקולוג,אונקולוגית,אופטיקאי,אופטיקאית,אורולוג,אורולוגית,אורתופד,אורתופדית,אח,אחות,אטליזן,אטליזנית,איכר,איכרה,אינסטלטור,אינסטלטורית,איש אבטחה,אשת אבטחה,איש מכירות,אשת מכירות,איש סיעוד,אשת סיעוד,איש סייבר,אשת סייבר,איש שיווק,אשת שיווק,אנימטור,אנימטורית,אסטרונום,אסטרונומית,אפידמיולוג,אפידמיולוגית,אקטואר,אקטוארית,ארכיאולוג,ארכיאולוגית,בוחן רכב,בוחנת רכב,בוטנאי,בוטנאית,בורר,בוררת,ביולוג,ביולוגית,בלש,בלשית,במאי,במאית,ברמן,ברמנית,גאולוג,גאולוגית,גבבן,גבבנית,גנן,גננת,גרפיקאי,גרפיקאית,דבוראי,דבוראית,דובר,דוברת,דוגמן,דוגמנית,דוקטור,דוקטורית,דיקן,דיקנית,דייל,דיילת,דייל מכירות,דיילת מכירות,דיפלומט,דיפלומטית,דייג,דייגת,דרמטולוג,דרמטולוגית,היסטוריון,היסטוריונית,הידרולוג,הידרולוגית,ווטרינר,ווטרינרית,זגג,זגגית,זבן,זבנית,זמר,זמרת,חוקר,חוקרת,חזאי,חזאית,חייט,חייטת,חייל,חיילת,חלילן,חלילנית,חנקין,חנקינית,חשמלאי,חשמלאית,חקלאי,חקלאית,חוואי,חוואית,חובש,חובשת,טבח,טבחת,טייח,טייחת,טייס,טייסת,טכנאי,טכנאית,יועץ חינוכי,יועצת חינוכית,יועץ פרישה,יועצת פרישה,יינן,ייננית,ימאי,ימאית,כימאי,כימאית,כלבן,כלבנית,כלכלן,כלכלנית,כבאי,כבאית,כנר,כנרת,כוריאוגרף,כוריאוגרפית,כרטיסן,כרטיסנית,כתב,כתבת,לבורנט,לבורנטית,מאגד נתונים,מאגדת נתונים,מאייר,מאיירת,מאמן,מאמנת,מאפר,מאפרת,מארגן אירועים,מארגנת אירועים,מדבב,מדבבת,מדריך,מדריכה,מדריך ברידג',מדריכת ברידג',מהנדס,מהנדסת,מוזיקאי,מוזיקאית,מורה,מורה דרך,מורת דרך,מחנך,מחנכת,מחסנאי,מחסנאית,מטפל,מטפלת,מיילד,מיילדת,מיקרוביולוג,מיקרוביולוגית,מכונאי,מכונאית,מלצר,מלצרית,מנהל,מנהלת,מנהל חשבונות,מנהלת חשבונות,מנהל מוצר,מנהלת מוצר,מנהל פרויקטים,מנהלת פרויקטים,מנהל משאבי אנוש,מנהלת משאבי אנוש,מנחה,מנקה,מנעולן,מנעולנית,מנתח,מנתחת,מנתח מערכות,מנתחת מערכות,מסגר,מסגרית,מעבד נתונים,מעבדת נתונים,מעצב,מעצבת,מעצב אופנה,מעצבת אופנה,מעצב ממשק משתמש,מעצבת ממשק משתמש,מפיק,מפיקה,מציל,מצילה,מרדים,מרדימה,מרכז לוגיסטי,מרכזת לוגיסטית,מרפא בעיסוק,מרפאה בעיסוק,מרצה,משווק,משווקת,משורר,משוררת,משפטן,משפטנית,מתכנת,מתכנתת,נגר,נגרית,נהג,נהגת,נוירולוג,נוירולוגית,נוטריון,נוטריונית,נטורופת,נטורופתית,סבל,סבלית,סוכן ביטוח,סוכנת ביטוח,סוכן נסיעות,סוכנת נסיעות,סוציולוג,סוציולוגית,סופר,סופרת,סדרן,סדרנית,סטטיסטיקאי,סטטיסטיקאית,ספר,ספרית,ספורטאי,ספורטאית,עגורנאי,עגורנאית,עובד סוציאלי,עובדת סוציאלית,עובד ייצור,עובדת ייצור,עוזר פרלמנטרי,עוזרת פרלמנטרית,עורך,עורכת,עורך דין,עורכת דין,עיתונאי,עיתונאית,עקר בית,עקרת בית,פועל בניין,פועלת בניין,פטיסייר,פטיסיירית,פיזיותרפיסט,פיזיותרפיסטית,פיזיקאי,פיזיקאית,פילוסוף,פילוסופית,פסל,פסלת,פסנתרן,פסנתרנית,פקיד,פקידה,פקיד קבלה,פקידת קבלה,פרמדיק,פרמדיקית,פרופסור,פרופסורית,פסיכולוג,פסיכולוגית,פסיכיאטר,פסיכיאטרית,פקח טיסה,פקחית טיסה,צורף,צורפת,צייר,ציירת,צלם,צלמת,צבע,צבעית,קבלן,קבלנית,קברניט,קברניטית,קונדיטור,קונדיטורית,קופאי,קופאית,קלדן,קלדנית,קלינאי תקשורת,קלינאית תקשורת,קמעונאי,קמעונאית,קצין,קצינה,קרדיולוג,קרדיולוגית,רב,רבנית,רדיולוג,רדיולוגית,רואה חשבון,רואת חשבון,רופא,רופאה,רוקח,רוקחת,רכז גיוס,רכזת גיוס,רפד,רפדית,רצף,רצפת,רקדן,רקדנית,רתך,רתכת,שואב אבק (מפעיל),שואבת אבק (מפעילה),שומר,שומרת,שחקן,שחקנית,שליח,שליחה,שמאי,שמאית,שען,שענית,שף,שפית,שוטר,שוטרת,שופט,שופטת,שרברב,שרברבית,תובע,תובעת,תזונאי,תזונאית,תסריטאי,תסריטאית,תכשיטן,תכשיטנית,תרפיסט,תרפיסטית,מאבטח,מאבטחת,אח,אחות,זבן,זבנית,חקלאי,חקלאית,איכר,איכרה,במאי,שמאי,במאית,שמאית,חשמלאי,חשמלאית,דייג,דייגת,דייגית,צפורה,ציפורה`
     };
 
-    const DATA = {};
+    // ניקוי מראש של המאגרים כדי למנוע קפיאה של הדפדפן 
+    const NORMALIZED_DATA = {};
     for (let key in RAW_DATA) {
-        DATA[key] = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
+        const rawWords = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
+        NORMALIZED_DATA[key] = rawWords.map(w => ({
+            original: w,
+            clean: normalizeHebrew(w)
+        }));
     }
 
     const CATEGORIES = [
@@ -213,7 +218,6 @@
     socket.on('connect', () => {
         if (currentRoom && myName) {
             socket.emit('joinRoom', { roomId: currentRoom, playerName: myName, isHostClaim: isHost });
-
             const activeScreen = document.querySelector('.screen.active');
             if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
                 setTimeout(() => {
@@ -413,25 +417,29 @@
 
     function skipField(id) {
         const input = document.getElementById('input-' + id);
-        input.value = "---";
-        input.disabled = true;
+        if (input) {
+            input.value = "---";
+            input.disabled = true;
+        }
     }
 
     function normalizeHebrew(word) {
+        if (!word) return "";
         return word.trim().replace(/['"־\-]/g, '').replace(/יי+/g, 'י').replace(/וו+/g, 'ו');
     }
 
-    function isMatch(userWord, dbArray) {
+    function isMatch(userWord, categoryId) {
         const cleanUser = normalizeHebrew(userWord);
-        return dbArray.some(dbWord => {
-            const cleanDb = normalizeHebrew(dbWord);
+        const dbArray = NORMALIZED_DATA[categoryId] || [];
+        return dbArray.some(item => {
+            const cleanDb = item.clean;
             return cleanDb === cleanUser || 
                    (cleanDb.startsWith(cleanUser) && cleanDb.length - cleanUser.length <= 1) ||
                    (cleanUser.startsWith(cleanDb) && cleanUser.length - cleanDb.length <= 1);
         });
     }
 
-    // הגנה חכמה וחסינת קריסות (ללא AbortController בעייתי בניידים)
+    // הגנה חכמה וחסינת קריסות: טיימר שעוקף את הדפדפן
     async function checkWordWithServer(catLabel, val) {
         try {
             const fetchPromise = fetch('/api/ask-judge', {
@@ -444,13 +452,13 @@
             });
 
             const timeoutPromise = new Promise((resolve, reject) => {
-                setTimeout(() => reject(new Error('timeout')), 5000); // מקסימום 5 שניות לשופט
+                setTimeout(() => reject(new Error('timeout')), 5000); 
             });
 
             const data = await Promise.race([fetchPromise, timeoutPromise]);
             return { isValid: !!data.isValid, reason: data.reason || '' };
         } catch(e) {
-            return { isValid: true, reason: "אושר (השופט לא זמין)" };
+            return { isValid: true, reason: "אושר (השופט עסוק)" };
         }
     }
 
@@ -467,50 +475,60 @@
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
-        const waitMsg = document.getElementById('wait-for-others-msg');
+        const waitMsg = document.getElementById('wait-for-others-msg'); // תוקן! חסין מקריסה
         
-        if (isMultiplayerMode) {
-            waitMsg.style.display = 'block';
-            socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
-        } else {
-            waitMsg.style.display = 'none'; // לא מציגים הודעת המתנה לאחרים במשחק יחיד
-        }
-
-        // בדיקה טורית ובטוחה שלא קופאת
-        for (const cat of CATEGORIES) {
-            const val = document.getElementById('input-' + cat.id).value.trim();
-            const normalizedVal = normalizeHebrew(val);
-            let isCorrect = false;
-            let feedback = '';
-
-            if (val === "---" || val === "") {
-                feedback = "דילגת";
-            } else if (!normalizedVal.startsWith(currentLetter)) {
-                feedback = `חייב להתחיל באות ${currentLetter}`;
+        if (waitMsg) {
+            if (isMultiplayerMode) {
+                waitMsg.style.display = 'block';
+                socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
             } else {
-                if (isMatch(val, DATA[cat.id])) {
-                    isCorrect = true;
-                    lastCorrectCount++;
-                } else {
-                    statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
-                    const judgeRes = await checkWordWithServer(cat.label, val);
-                    isCorrect = judgeRes.isValid;
-                    feedback = judgeRes.reason;
-                    if (isCorrect) lastCorrectCount++;
-                }
+                waitMsg.style.display = 'none'; // מוסתר במשחק יחיד
             }
-            playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
         }
-        
-        hasSubmittedCurrentRound = true;
-        statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
 
-        if (isMultiplayerMode) {
-            socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
-        } else {
-            // משחק יחיד עובר מיד לפודיום
-            const p = { name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers };
-            showFinalResults([p], p);
+        try {
+            // בדיקה טורית ובטוחה
+            for (const cat of CATEGORIES) {
+                const inputEl = document.getElementById('input-' + cat.id);
+                const val = inputEl ? inputEl.value.trim() : "";
+                const normalizedVal = normalizeHebrew(val);
+                let isCorrect = false;
+                let feedback = '';
+
+                if (val === "---" || val === "") {
+                    feedback = "דילגת";
+                } else if (!normalizedVal.startsWith(currentLetter)) {
+                    feedback = `חייב להתחיל באות ${currentLetter}`;
+                } else {
+                    if (isMatch(val, cat.id)) {
+                        isCorrect = true;
+                        lastCorrectCount++;
+                    } else {
+                        statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
+                        const judgeRes = await checkWordWithServer(cat.label, val);
+                        isCorrect = judgeRes.isValid;
+                        feedback = judgeRes.reason;
+                        if (isCorrect) lastCorrectCount++;
+                    }
+                }
+                playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
+            }
+            
+            hasSubmittedCurrentRound = true;
+            statusText.innerText = isMultiplayerMode ? "הבדיקה הסתיימה! ממתין לשאר השחקנים..." : "מכין את התוצאות שלך...";
+
+            if (isMultiplayerMode) {
+                socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
+            } else {
+                const p = { name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers };
+                showFinalResults([p], p);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("תקלה קטנה בשופט, אבל המשחק ממשיך!");
+            if (!isMultiplayerMode) {
+                showFinalResults([{ name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers }], {answers: playerAnswers});
+            }
         }
     }
 
@@ -576,6 +594,8 @@
 
     function showFinalResults(leaderboard, myData) {
         showScreen('results');
+        if (!leaderboard || leaderboard.length === 0) return;
+        
         const winner = leaderboard[0];
         
         const winnerText = leaderboard.length > 1 ? `המנצח הוא ${winner.name}! 🏆` : `סיימת את המשחק!`;
@@ -605,11 +625,11 @@
         const singleResults = document.getElementById('single-player-results');
         
         if (leaderboard.length === 1) {
-            if(singleResults) {
+            if(singleResults && myData && myData.answers) {
                 const breakdown = document.getElementById('answers-breakdown');
                 breakdown.innerHTML = '';
-                Object.keys(winner.answers).forEach(cat => {
-                    const ans = winner.answers[cat];
+                Object.keys(myData.answers).forEach(cat => {
+                    const ans = myData.answers[cat];
                     const icon = ans.val === "דלג" ? "⚪" : (ans.isCorrect ? "✅" : "❌");
                     breakdown.innerHTML += `<div style="margin-bottom: 5px;">${icon} ${cat}: <strong>${ans.val}</strong></div>`;
                 });
@@ -618,7 +638,7 @@
             if(comparisonContainer) comparisonContainer.innerHTML = '';
         } else if (leaderboard.length > 1) {
             if(singleResults) singleResults.style.display = 'none';
-            if(comparisonContainer) {
+            if(comparisonContainer && myData && myData.answers) {
                 let tableHtml = `
                     <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
                         <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">השוואת תשובות:</h3>
@@ -637,7 +657,7 @@
 
                 CATEGORIES.forEach(cat => {
                     tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
-                    tableHtml += getAnswerCellHtml(myData.answers ? myData.answers[cat.label] : null);
+                    tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
 
                     otherPlayers.forEach(p => {
                         const theirAns = p.answers ? p.answers[cat.label] : null;
