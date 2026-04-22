@@ -96,11 +96,12 @@
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">בודק תשובות (זה ייקח מספר שניות)...</p>
         
-        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
+        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
-            <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים חיים:</strong>
+            <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
             <div id="host-updates-list" style="margin-top: 10px; font-size: 1rem;"></div>
+            <button id="force-end-btn" class="btn-danger" style="display:none; width: 100%; padding: 10px; border:none; border-radius: 8px; font-weight:bold; color:white; background:#d0021b; margin-top: 15px;" onclick="forceEndGame()">הצג תוצאות עכשיו לכולם (דלג על מי שנתקע)</button>
         </div>
     </div>
 
@@ -177,7 +178,6 @@
                 isHostClaim: isHost 
             });
 
-            // חסינות לניתוקי שרת - אם השרת עשה ריסטרט ושכח שסיימנו, נזכיר לו
             const activeScreen = document.querySelector('.screen.active');
             if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
                 setTimeout(() => {
@@ -404,7 +404,6 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
                         }, 8000);
-                        if (!res.ok) throw new Error('Network error');
                         const aiData = await res.json();
                         isCorrect = aiData.isValid;
                         feedback = aiData.reason || '';
@@ -435,16 +434,36 @@
     }
 
     socket.on('playerFinished', (data) => {
+        // מציג לכל שחקן שנמצא במסך המתנה מי סיים ומי חסר
         document.getElementById('host-updates').style.display = 'block';
         const list = document.getElementById('host-updates-list');
+        const statusText = document.getElementById('checking-status');
+        
+        if (data.submittedCount >= data.totalPlayers) {
+            statusText.innerText = "כולם סיימו! מעבד תוצאות...";
+        } else if (statusText.innerText.includes('הבדיקה הסתיימה')) {
+            statusText.innerHTML = `הבדיקה הסתיימה! ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
+        }
+        
         if (list) {
-            const existingId = "status-" + data.playerName.replace(/\\s+/g, '-');
+            const existingId = "status-" + data.playerName.replace(/\s+/g, '-');
             const existingEl = document.getElementById(existingId);
             if (!existingEl) {
-                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין (${data.submittedCount}/${data.totalPlayers})</div>`;
+                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין</div>`;
             }
         }
+
+        // חשיפת כפתור סיום כוחני למנהל התחרות
+        if (isHost && data.submittedCount < data.totalPlayers) {
+            document.getElementById('force-end-btn').style.display = 'inline-block';
+        }
     });
+
+    function forceEndGame() {
+        if (confirm("האם אתה בטוח שברצונך לסיים את המשחק עבור כולם עכשיו ולהציג תוצאות? (מי שלא סיים יקבל 0 נקודות)")) {
+            socket.emit('forceEndGame', currentRoom);
+        }
+    }
 
     socket.on('gameOver', (leaderboard) => {
         const myName = document.getElementById('player-name').value;
