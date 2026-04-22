@@ -5,9 +5,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
-// הגנה נגד קריסות שרת פתאומיות
-process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
-process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
+process.on('uncaughtException', (err) => console.error('Uncaught:', err));
+process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
 
 const app = express();
 const server = http.createServer(app);
@@ -20,7 +19,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני (עם חסם זמן של 6 שניות)
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -31,10 +29,10 @@ app.post('/api/ask-judge', async (req, res) => {
         1. התשובה חייבת להתחיל באות הנכונה "${letter}". אם לא - פסול.
         2. פסול לחלוטין מילים שהן ג'יבריש ברור או שורת אותיות חסרת משמעות.
         3. מותרת שגיאת כתיב של אות אחת (בתנאי שזו לא האות הראשונה).
-        4. התעלם מעודף או חוסר באותיות 'א' ו-'י' (אשר את המילה גם אם חסר או נוסף א/י).
+        4. התעלם מעודף או חוסר באותיות 'א' ו-'י'.
         5. אם המילה קשורה לנושא ויש סיכוי טוב שהיא עונה להגדרה - אשר.
-        6. בקטגוריות "שם של בן" או "שם של בת" - אשר שמות לועזיים אם הם נפוצים בחו"ל.
-        7. בקטגוריות "איבר גוף", "צומח", ו"מאכל" - אשר אם נכתב השם המדעי או הלועזי המקובל.
+        6. בקטגוריות "שם של בן/בת" - אשר שמות לועזיים נפוצים.
+        7. בקטגוריות "איבר גוף", "צומח", "מאכל" - אשר גם שם מדעי או לועזי מקובל.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
         {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
@@ -42,20 +40,17 @@ app.post('/api/ask-judge', async (req, res) => {
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
-        }, 6000));
+        }, 5500));
         
         const result = model.generateContent(prompt).then(r => {
-            isResolved = true;
-            return r;
+            isResolved = true; return r;
         }).catch(e => {
-            isResolved = true;
-            return { error: true };
+            isResolved = true; return { error: true };
         });
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט התעכב)" });
-        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
+        if (response.timeout || response.error) return res.json({ isValid: true, reason: "אושר (השופט מתעכב)" });
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
@@ -69,7 +64,6 @@ function calculateAndSendResults(roomId) {
     if (!room) return;
     
     const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
-    
     room.players.forEach(p => {
         let score = p.correctCount * 10;
         if (minTime > 0 && minTime !== Infinity && p.time < 999) {
@@ -99,7 +93,6 @@ io.on('connection', (socket) => {
         rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
         socket.join(roomId);
         rooms[roomId].players.push({ id: socket.id, name: hostName, isHost: true, hasSubmitted: false });
-        
         socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players });
     });
 
@@ -107,8 +100,7 @@ io.on('connection', (socket) => {
         let room = rooms[roomId];
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
-            const gameLetter = letters[Math.floor(Math.random() * letters.length)];
-            rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
+            rooms[roomId] = { players: [], letter: letters[Math.floor(Math.random() * letters.length)], submittedCount: 0, gameStarted: false };
             room = rooms[roomId];
         }
 
@@ -133,38 +125,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    // כפתור הקסם: משחק נוסף באותו חדר
-    socket.on('backToLobby', (roomId) => {
-        const room = rooms[roomId];
-        if (room) {
-            room.gameStarted = false;
-            room.submittedCount = 0;
-            const letters = "אבגדהזחטיכלמנסעפצקרשת";
-            room.letter = letters[Math.floor(Math.random() * letters.length)];
-            
-            room.players.forEach(p => {
-                p.hasSubmitted = false;
-                p.correctCount = 0;
-                p.time = 0;
-                p.answers = {};
-                p.finalScore = 0;
-            });
-            
-            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players });
-        }
-    });
-
-    // חיווי חי לשחקנים
     socket.on('announceFinish', ({ roomId, playerName }) => {
         io.to(roomId).emit('playerAnnouncedFinish', playerName);
     });
 
     socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) {
-            socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. רעננו את הדף והתחילו משחק חדש.');
-            return;
-        }
+        if (!room) return socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. נאלץ להתחיל משחק חדש.');
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
@@ -186,14 +153,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // סיום כוחני על ידי המנהל
     socket.on('forceEndGame', (data) => {
         const room = rooms[data.roomId];
         if (!room) return;
         const host = room.players.find(p => p.id === socket.id);
-        
         if (host && host.isHost) {
-            // אם המנהל טרם הגיש, נשמור את התוצאות החלקיות שלו
             if (!host.hasSubmitted && data.forceHostSubmit) {
                 host.correctCount = data.myCorrectCount || 0;
                 host.time = data.myTime || 999;
@@ -201,20 +165,29 @@ io.on('connection', (socket) => {
                 host.hasSubmitted = true;
                 room.submittedCount++;
             }
-            
             room.players.forEach(p => {
                 if (!p.hasSubmitted) {
                     p.hasSubmitted = true;
-                    p.correctCount = 0;
-                    p.time = 999;
-                    p.answers = {};
+                    p.correctCount = 0; p.time = 999; p.answers = {};
                     room.submittedCount++;
                 }
             });
             calculateAndSendResults(data.roomId);
         }
     });
-    
+
+    socket.on('backToLobby', (roomId) => {
+        const room = rooms[roomId];
+        if (room) {
+            room.gameStarted = false;
+            room.submittedCount = 0;
+            const letters = "אבגדהזחטיכלמנסעפצקרשת";
+            room.letter = letters[Math.floor(Math.random() * letters.length)];
+            room.players.forEach(p => { p.hasSubmitted = false; p.correctCount = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
+            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players });
+        }
+    });
+
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
@@ -231,10 +204,7 @@ io.on('connection', (socket) => {
                             rooms[roomId].players[playerIndex].time = 999; 
                             rooms[roomId].players[playerIndex].answers = {};
                             rooms[roomId].submittedCount++;
-                            
-                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) {
-                                calculateAndSendResults(roomId);
-                            }
+                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId);
                         }
                     }, 120000); 
                 }
@@ -244,4 +214,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server is running on port ' + PORT));
+server.listen(PORT, () => console.log('Server is running'));
