@@ -32,10 +32,10 @@
         .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
         .gold-medal { font-size: 1.5rem; }
         
-        .comparison-table { min-width: 600px; font-size: 0.9rem; }
+        .comparison-table { min-width: 100%; font-size: 0.9rem; }
         .comparison-table th { background-color: #34495e; }
         .comparison-table th.my-col { background-color: var(--secondary); }
-        .comparison-table td { vertical-align: top; border: 1px solid #eee;}
+        .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
@@ -48,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה 4</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה סופית</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -99,7 +99,7 @@
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות נבדקות כעת...</p>
         
-        <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
+        <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem; display:none;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
@@ -116,12 +116,7 @@
             <tbody id="leaderboard-body"></tbody>
         </table>
 
-        <div id="single-player-results" style="display:none; margin-top:20px; text-align:right; background:#f9f9f9; padding:15px; border-radius:10px;">
-            <h3 style="margin-top:0;">פירוט התשובות שלך:</h3>
-            <div id="answers-breakdown"></div>
-        </div>
-
-        <div id="answers-comparison-container"></div>
+        <div id="answers-comparison-container" style="overflow-x: auto;"></div>
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
@@ -140,9 +135,11 @@
         professions: `אדריכל,אדריכלית,אגרונום,אגרונומית,אונקולוג,אונקולוגית,אופטיקאי,אופטיקאית,אורולוג,אורולוגית,אורתופד,אורתופדית,אח,אחות,אטליזן,אטליזנית,איכר,איכרה,אינסטלטור,אינסטלטורית,איש אבטחה,אשת אבטחה,איש מכירות,אשת מכירות,איש סיעוד,אשת סיעוד,איש סייבר,אשת סייבר,איש שיווק,אשת שיווק,אנימטור,אנימטורית,אסטרונום,אסטרונומית,אפידמיולוג,אפידמיולוגית,אקטואר,אקטוארית,ארכיאולוג,ארכיאולוגית,בוחן רכב,בוחנת רכב,בוטנאי,בוטנאית,בורר,בוררת,ביולוג,ביולוגית,בלש,בלשית,במאי,במאית,ברמן,ברמנית,גאולוג,גאולוגית,גבבן,גבבנית,גנן,גננת,גרפיקאי,גרפיקאית,דבוראי,דבוראית,דובר,דוברת,דוגמן,דוגמנית,דוקטור,דוקטורית,דיקן,דיקנית,דייל,דיילת,דייל מכירות,דיילת מכירות,דיפלומט,דיפלומטית,דייג,דייגת,דרמטולוג,דרמטולוגית,היסטוריון,היסטוריונית,הידרולוג,הידרולוגית,ווטרינר,ווטרינרית,זגג,זגגית,זבן,זבנית,זמר,זמרת,חוקר,חוקרת,חזאי,חזאית,חייט,חייטת,חייל,חיילת,חלילן,חלילנית,חנקין,חנקינית,חשמלאי,חשמלאית,חקלאי,חקלאית,חוואי,חוואית,חובש,חובשת,טבח,טבחת,טייח,טייחת,טייס,טייסת,טכנאי,טכנאית,יועץ חינוכי,יועצת חינוכית,יועץ פרישה,יועצת פרישה,יינן,ייננית,ימאי,ימאית,כימאי,כימאית,כלבן,כלבנית,כלכלן,כלכלנית,כבאי,כבאית,כנר,כנרת,כוריאוגרף,כוריאוגרפית,כרטיסן,כרטיסנית,כתב,כתבת,לבורנט,לבורנטית,מאגד נתונים,מאגדת נתונים,מאייר,מאיירת,מאמן,מאמנת,מאפר,מאפרת,מארגן אירועים,מארגנת אירועים,מדבב,מדבבת,מדריך,מדריכה,מדריך ברידג',מדריכת ברידג',מהנדס,מהנדסת,מוזיקאי,מוזיקאית,מורה,מורה דרך,מורת דרך,מחנך,מחנכת,מחסנאי,מחסנאית,מטפל,מטפלת,מיילד,מיילדת,מיקרוביולוג,מיקרוביולוגית,מכונאי,מכונאית,מלצר,מלצרית,מנהל,מנהלת,מנהל חשבונות,מנהלת חשבונות,מנהל מוצר,מנהלת מוצר,מנהל פרויקטים,מנהלת פרויקטים,מנהל משאבי אנוש,מנהלת משאבי אנוש,מנחה,מנקה,מנעולן,מנעולנית,מנתח,מנתחת,מנתח מערכות,מנתחת מערכות,מסגר,מסגרית,מעבד נתונים,מעבדת נתונים,מעצב,מעצבת,מעצב אופנה,מעצבת אופנה,מעצב ממשק משתמש,מעצבת ממשק משתמש,מפיק,מפיקה,מציל,מצילה,מרדים,מרדימה,מרכז לוגיסטי,מרכזת לוגיסטית,מרפא בעיסוק,מרפאה בעיסוק,מרצה,משווק,משווקת,משורר,משוררת,משפטן,משפטנית,מתכנת,מתכנתת,נגר,נגרית,נהג,נהגת,נוירולוג,נוירולוגית,נוטריון,נוטריונית,נטורופת,נטורופתית,סבל,סבלית,סוכן ביטוח,סוכנת ביטוח,סוכן נסיעות,סוכנת נסיעות,סוציולוג,סוציולוגית,סופר,סופרת,סדרן,סדרנית,סטטיסטיקאי,סטטיסטיקאית,ספר,ספרית,ספורטאי,ספורטאית,עגורנאי,עגורנאית,עובד סוציאלי,עובדת סוציאלית,עובד ייצור,עובדת ייצור,עוזר פרלמנטרי,עוזרת פרלמנטרית,עורך,עורכת,עורך דין,עורכת דין,עיתונאי,עיתונאית,עקר בית,עקרת בית,פועל בניין,פועלת בניין,פטיסייר,פטיסיירית,פיזיותרפיסט,פיזיותרפיסטית,פיזיקאי,פיזיקאית,פילוסוף,פילוסופית,פסל,פסלת,פסנתרן,פסנתרנית,פקיד,פקידה,פקיד קבלה,פקידת קבלה,פרמדיק,פרמדיקית,פרופסור,פרופסורית,פסיכולוג,פסיכולוגית,פסיכיאטר,פסיכיאטרית,פקח טיסה,פקחית טיסה,צורף,צורפת,צייר,ציירת,צלם,צלמת,צבע,צבעית,קבלן,קבלנית,קברניט,קברניטית,קונדיטור,קונדיטורית,קופאי,קופאית,קלדן,קלדנית,קלינאי תקשורת,קלינאית תקשורת,קמעונאי,קמעונאית,קצין,קצינה,קרדיולוג,קרדיולוגית,רב,רבנית,רדיולוג,רדיולוגית,רואה חשבון,רואת חשבון,רופא,רופאה,רוקח,רוקחת,רכז גיוס,רכזת גיוס,רפד,רפדית,רצף,רצפת,רקדן,רקדנית,רתך,רתכת,שואב אבק (מפעיל),שואבת אבק (מפעילה),שומר,שומרת,שחקן,שחקנית,שליח,שליחה,שמאי,שמאית,שען,שענית,שף,שפית,שוטר,שוטרת,שופט,שופטת,שרברב,שרברבית,תובע,תובעת,תזונאי,תזונאית,תסריטאי,תסריטאית,תכשיטן,תכשיטנית,תרפיסט,תרפיסטית,מאבטח,מאבטחת,אח,אחות,זבן,זבנית,חקלאי,חקלאית,איכר,איכרה,במאי,שמאי,במאית,שמאית,חשמלאי,חשמלאית,דייג,דייגת,דייגית,צפורה,ציפורה`
     };
 
-    const DATA = {};
+    // מייעל את המאגרים בזיכרון, פותר כל אפשרות לקפיאה!
+    const NORMALIZED_DATA = {};
     for (let key in RAW_DATA) {
-        DATA[key] = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
+        const rawWords = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
+        NORMALIZED_DATA[key] = rawWords.map(w => normalizeHebrew(w));
     }
 
     const CATEGORIES = [
@@ -421,16 +418,14 @@
 
     function isMatch(userWord, categoryId) {
         const cleanUser = normalizeHebrew(userWord);
-        const dbArray = DATA[categoryId] || [];
-        return dbArray.some(dbWord => {
-            const cleanDb = normalizeHebrew(dbWord);
+        const dbArray = NORMALIZED_DATA[categoryId] || [];
+        return dbArray.some(cleanDb => {
             return cleanDb === cleanUser || 
                    (cleanDb.startsWith(cleanUser) && cleanDb.length - cleanUser.length <= 1) ||
                    (cleanUser.startsWith(cleanDb) && cleanUser.length - cleanDb.length <= 1);
         });
     }
 
-    // בדיקה מול ג'מיני שמובטח שתסיים תוך 5 שניות מקסימום
     async function checkWordWithServer(catLabel, val) {
         try {
             const fetchPromise = fetch('/api/ask-judge', {
@@ -448,7 +443,7 @@
 
             const data = await Promise.race([fetchPromise, timeoutPromise]);
             if (data.timeout) {
-                return { isValid: true, reason: "אושר (השופט עסוק)" };
+                return { isValid: true, reason: "אושר (השופט מתעכב)" };
             }
             return { isValid: !!data.isValid, reason: data.reason || '' };
         } catch(e) {
@@ -476,12 +471,11 @@
                 waitMsg.style.display = 'block';
                 socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
             } else {
-                waitMsg.style.display = 'none'; 
+                waitMsg.style.display = 'none'; // מוסתר במשחק יחיד
             }
         }
 
         try {
-            // בדיקה טורית ובטוחה
             for (const cat of CATEGORIES) {
                 const inputEl = document.getElementById('input-' + cat.id);
                 const val = inputEl ? inputEl.value.trim() : "";
@@ -514,13 +508,11 @@
             if (isMultiplayerMode) {
                 socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
             } else {
-                // משחק יחיד עובר מיד לפודיום
                 const p = { name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers };
                 showFinalResults([p], p);
             }
         } catch (e) {
-            // ה"אפוד מגן" שלנו - אם משהו קורס, נאשר ונמשיך
-            console.error(e);
+            console.error("שגיאה במערכת:", e);
             hasSubmittedCurrentRound = true;
             if (isMultiplayerMode) {
                 socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
@@ -571,8 +563,8 @@
 
     socket.on('gameOver', (leaderboard) => {
         let myData = leaderboard.find(p => p.name === myName);
-        if (!myData) myData = { name: myName, answers: {} };
-        if (!myData.answers) myData.answers = {};
+        if (!myData) myData = { name: myName, answers: playerAnswers };
+        if (!myData.answers) myData.answers = playerAnswers;
         
         showFinalResults(leaderboard, myData);
     });
@@ -590,10 +582,29 @@
         return `<td style="vertical-align:middle;"><strong>${ans.val}</strong>${status}</td>`;
     }
 
+    // פונקציה לבניית שורה מפורטת למשחק יחיד
+    function getAnswerDivHtml(cat, ans) {
+        if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---") return `<div style="margin-bottom: 8px;">⚪ <strong>${cat}:</strong> דילג</div>`;
+        let status = '';
+        if (ans.isCorrect) {
+            if (ans.feedback) status = '<span style="color:green; font-size:0.9em;">🤖 אושר (שופט)</span>';
+            else status = '<span style="color:green; font-size:0.9em;">✅ אושר (מאגר)</span>';
+        } else {
+            status = '<span style="color:red; font-size:0.9em;">❌ נפסל</span>';
+            if (ans.feedback) status += ` <span style="font-size:0.85em; color:#666;">(${ans.feedback})</span>`;
+        }
+        return `<div style="margin-bottom: 8px;"><strong>${cat}:</strong> ${ans.val} &nbsp; ${status}</div>`;
+    }
+
     function showFinalResults(leaderboard, myData) {
         showScreen('results');
         if (!leaderboard || leaderboard.length === 0) return;
         
+        if (!myData) {
+            myData = leaderboard.find(p => p.name === myName);
+            if (!myData) myData = { name: myName, answers: playerAnswers };
+        }
+
         const winner = leaderboard[0];
         
         const winnerText = leaderboard.length > 1 ? `המנצח הוא ${winner.name}! 🏆` : `סיימת את המשחק!`;
@@ -620,53 +631,38 @@
         });
 
         const comparisonContainer = document.getElementById('answers-comparison-container');
-        const singleResults = document.getElementById('single-player-results');
-        
-        if (leaderboard.length === 1) {
-            if(singleResults && myData && myData.answers) {
-                const breakdown = document.getElementById('answers-breakdown');
-                breakdown.innerHTML = '';
-                Object.keys(myData.answers).forEach(cat => {
-                    const ans = myData.answers[cat];
-                    const icon = ans.val === "דלג" ? "⚪" : (ans.isCorrect ? "✅" : "❌");
-                    breakdown.innerHTML += `<div style="margin-bottom: 5px;">${icon} ${cat}: <strong>${ans.val}</strong></div>`;
-                });
-                singleResults.style.display = 'block';
-            }
-            if(comparisonContainer) comparisonContainer.innerHTML = '';
-        } else if (leaderboard.length > 1) {
-            if(singleResults) singleResults.style.display = 'none';
-            if(comparisonContainer && myData && myData.answers) {
-                let tableHtml = `
-                    <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
-                        <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">השוואת תשובות:</h3>
-                        <table class="leaderboard-table comparison-table" style="margin-top:0;">
-                            <thead>
-                                <tr>
-                                    <th>קטגוריה</th>
-                                    <th class="my-col">התשובות שלי</th>`;
-                
-                const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
+        if (comparisonContainer && myData && myData.answers) {
+            let tableHtml = `
+                <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
+                    <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">
+                        ${leaderboard.length > 1 ? 'השוואת תשובות:' : 'פירוט התשובות שלך:'}
+                    </h3>
+                    <table class="leaderboard-table comparison-table" style="margin-top:0;">
+                        <thead>
+                            <tr>
+                                <th>קטגוריה</th>
+                                <th class="my-col">${leaderboard.length > 1 ? 'התשובות שלי' : myData.name}</th>`;
+            
+            const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
+            otherPlayers.forEach(p => {
+                tableHtml += `<th>${p.name}</th>`;
+            });
+            
+            tableHtml += `</tr></thead><tbody>`;
+
+            CATEGORIES.forEach(cat => {
+                tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
+                tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
+
                 otherPlayers.forEach(p => {
-                    tableHtml += `<th>${p.name}</th>`;
+                    const theirAns = p.answers ? p.answers[cat.label] : null;
+                    tableHtml += getAnswerCellHtml(theirAns);
                 });
-                
-                tableHtml += `</tr></thead><tbody>`;
 
-                CATEGORIES.forEach(cat => {
-                    tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
-                    tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
-
-                    otherPlayers.forEach(p => {
-                        const theirAns = p.answers ? p.answers[cat.label] : null;
-                        tableHtml += getAnswerCellHtml(theirAns);
-                    });
-
-                    tableHtml += `</tr>`;
-                });
-                tableHtml += `</tbody></table></div>`;
-                comparisonContainer.innerHTML = tableHtml;
-            }
+                tableHtml += `</tr>`;
+            });
+            tableHtml += `</tbody></table></div>`;
+            comparisonContainer.innerHTML = tableHtml;
         }
         
         window.finalLeaderboard = leaderboard;
