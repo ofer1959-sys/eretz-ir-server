@@ -20,22 +20,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני - גרסה קפדנית ומדויקת
+// שופט ג'מיני - גרסה קפדנית ללא "הזיות"
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט קפדן והוגן במשחק "ארץ עיר" בעברית.
+        const prompt = `אתה שופט קפדן ומדויק מאוד במשחק "ארץ עיר" בעברית.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה של השחקן: "${answer}".
         עליך לשפוט לפי כללי הברזל הבאים:
-        1. האות הראשונה קובעת: המילה התקנית והנכונה חייבת להתחיל באות "${letter}". אם השחקן כתב מילה עם שגיאת כתיב באות הראשונה (למשל "אגבניה" באות א', במקום "עגבניה") - חובה עליך לפסול!
-        2. דיוק עובדתי: פסול דברים שאינם נכונים עובדתית לקטגוריה. למשל: "אילת" או "תל אביב" אינן ערי בירה - פסול אותן בקטגוריה זו.
-        3. שגיאות כתיב קלות: מותר לאשר שגיאת כתיב של אות אחת (למשל החלפה בין ט/ת או כ/ק), אך ורק אם השגיאה היא באמצע או בסוף המילה.
-        4. אותיות אהו"י: אשר מילה גם אם יש בה חוסר או עודף של אותיות א' או י'.
-        5. מילים זרות: בקטגוריות "שם של בן" או "שם של בת", אשר שמות לועזיים אם הם מוכרים ונפוצים. באיברי גוף, צומח ומאכל, מותר לאשר שם לועזי או מדעי מקובל.
-        6. פסול לחלוטין מילים שהן ג'יבריש ברור או המצאות.
+        1. האות הראשונה קובעת: המילה התקנית חייבת להתחיל באות "${letter}". אם יש שגיאה באות הראשונה - פסול.
+        2. דיוק עובדתי מוחלט: על המילה להיות שייכת באופן מובהק ומוכח לקטגוריה. אל תנחש ואל תניח הנחות. למשל: חומר בניין כמו 'בונדרול' הוא לא צמח, ו'אילת' היא לא עיר בירה. במקרים כאלו - פסול מיד!
+        3. אין לאשר המצאות: אל תאשר מילים מומצאות, ג'יבריש, או מילים שנשמעות כמו מונח מפוברק.
+        4. שגיאות כתיב קלות: מותר לאשר שגיאת כתיב של אות אחת (רק באמצע או בסוף המילה). מותר להתעלם מחוסר או עודף של אותיות א' או י'.
+        5. מילים לועזיות: אשר שמות זרים (למשל בשמות ילדים) או שמות מדעיים, אך ורק אם הם מוכרים ונמצאים בשימוש אמיתי ונפוץ.
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא הערות markdown) במבנה הבא:
+        החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
         {"isValid": true/false, "reason": "הסבר קצר של 2-4 מילים"}`;
         
         let isResolved = false;
@@ -116,7 +115,8 @@ io.on('connection', (socket) => {
         }
         
         socket.join(roomId);
-        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: room.players.find(p=>p.name===playerName).isHost });
+        const myPlayer = room.players.find(p => p.name === playerName);
+        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost });
         io.to(roomId).emit('updatePlayers', room.players);
     });
 
@@ -208,7 +208,7 @@ io.on('connection', (socket) => {
                             rooms[roomId].submittedCount++;
                             if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId);
                         }
-                    }, 120000); 
+                    }, 60000);
                 }
             }
         }
