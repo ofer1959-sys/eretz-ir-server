@@ -38,6 +38,7 @@
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
+        #host-updates { margin-top: 20px; font-size: 1.1rem; color: var(--secondary); text-align: right; }
     </style>
 </head>
 <body>
@@ -95,7 +96,8 @@
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0;">בודק תשובות (זה ייקח מספר שניות)...</p>
-        <p style="color: #666;">המתן שאר השחקנים יסיימו או ייפסלו.</p>
+        <p style="color: #666;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
+        <div id="host-updates"></div>
     </div>
 
     <div id="results" class="screen">
@@ -217,7 +219,6 @@
         currentRoom = data.roomId;
         isHost = data.isHost;
 
-        // מניעת זריקה ללובי אם אנחנו באמצע משחק!
         const activeScreen = document.querySelector('.screen.active').id;
         if (activeScreen === 'game-screen' || activeScreen === 'waiting-results' || activeScreen === 'results' || activeScreen === 'countdown-screen') {
             return;
@@ -356,8 +357,8 @@
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
         
-        // מערך הבדיקות - נבדוק את כל המילים במקביל ולא אחת אחרי השנייה!
-        const promises = CATEGORIES.map(async (cat) => {
+        // בדיקה טלסקופית (טורית) כדי לא לחנוק את הדפדפן והשרת
+        for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
             const normalizedVal = normalizeHebrew(val);
             let isCorrect = false;
@@ -370,32 +371,28 @@
             } else {
                 if (isMatch(val, DATA[cat.id])) {
                     isCorrect = true;
+                    correctCount++;
                 } else {
+                    statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
                     try {
                         const res = await fetchWithTimeout('/api/ask-judge', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
-                        }, 8000); // 8 שניות גג לבדיקה!
+                        }, 8000);
                         const aiData = await res.json();
                         isCorrect = aiData.isValid;
                         feedback = aiData.reason || '';
+                        if (isCorrect) correctCount++;
                     } catch(e) {
                         isCorrect = true;
                         feedback = "אושר מחמת הספק (עומס על השופט)";
+                        correctCount++;
                     }
                 }
             }
-            return { catLabel: cat.label, val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
-        });
-
-        // ממתינים שכל הבדיקות יסתיימו
-        const results = await Promise.all(promises);
-        
-        results.forEach(res => {
-            if (res.isCorrect) correctCount++;
-            playerAnswers[res.catLabel] = { val: res.val, isCorrect: res.isCorrect, feedback: res.feedback };
-        });
+            playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
+        }
 
         statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
 
@@ -411,6 +408,14 @@
             showFinalResults([p], p);
         }
     }
+    
+    // קבלת עדכון כששחקן אחר סיים את הבדיקה
+    socket.on('playerFinished', (data) => {
+        if (isHost) {
+            const updatesDiv = document.getElementById('host-updates');
+            updatesDiv.innerHTML += `<div style="margin-top: 5px;">✅ השחקן <strong>${data.playerName}</strong> סיים וממתין (${data.submittedCount}/${data.totalPlayers})</div>`;
+        }
+    });
 
     socket.on('gameOver', (leaderboard) => {
         const myName = document.getElementById('player-name').value;
