@@ -48,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה סופית</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה יציבה</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -98,7 +98,8 @@
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות נבדקות כעת...</p>
-        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
+        
+        <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
@@ -114,6 +115,11 @@
             <thead><tr><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן</th></tr></thead>
             <tbody id="leaderboard-body"></tbody>
         </table>
+
+        <div id="single-player-results" style="display:none; margin-top:20px; text-align:right; background:#f9f9f9; padding:15px; border-radius:10px;">
+            <h3 style="margin-top:0;">פירוט התשובות שלך:</h3>
+            <div id="answers-breakdown"></div>
+        </div>
 
         <div id="answers-comparison-container"></div>
 
@@ -425,31 +431,26 @@
         });
     }
 
-    const fetchWithTimeout = (url, options, timeout = 8000) => {
-        return Promise.race([
-            fetch(url, options),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
-        ]);
-    };
-
+    // הגנה חכמה וחסינת קריסות (ללא AbortController בעייתי בניידים)
     async function checkWordWithServer(catLabel, val) {
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5500); 
-            
-            const res = await fetch('/api/ask-judge', {
+            const fetchPromise = fetch('/api/ask-judge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ category: catLabel, letter: currentLetter, answer: val }),
-                signal: controller.signal
+                body: JSON.stringify({ category: catLabel, letter: currentLetter, answer: val })
+            }).then(res => {
+                if (!res.ok) throw new Error('HTTP error');
+                return res.json();
             });
-            clearTimeout(timeoutId);
-            
-            if (!res.ok) throw new Error('HTTP error');
-            const data = await res.json();
+
+            const timeoutPromise = new Promise((resolve, reject) => {
+                setTimeout(() => reject(new Error('timeout')), 5000); // מקסימום 5 שניות לשופט
+            });
+
+            const data = await Promise.race([fetchPromise, timeoutPromise]);
             return { isValid: !!data.isValid, reason: data.reason || '' };
         } catch(e) {
-            return { isValid: true, reason: "אושר מחמת הספק" };
+            return { isValid: true, reason: "אושר (השופט לא זמין)" };
         }
     }
 
@@ -466,11 +467,16 @@
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
+        const waitMsg = document.getElementById('wait-for-others-msg');
         
         if (isMultiplayerMode) {
+            waitMsg.style.display = 'block';
             socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
+        } else {
+            waitMsg.style.display = 'none'; // לא מציגים הודעת המתנה לאחרים במשחק יחיד
         }
 
+        // בדיקה טורית ובטוחה שלא קופאת
         for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
             const normalizedVal = normalizeHebrew(val);
@@ -502,6 +508,7 @@
         if (isMultiplayerMode) {
             socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
         } else {
+            // משחק יחיד עובר מיד לפודיום
             const p = { name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers };
             showFinalResults([p], p);
         }
@@ -547,14 +554,10 @@
     }
 
     socket.on('gameOver', (leaderboard) => {
-        // הגנה מפני קריסה אם הנתונים חסרים בעקבות סיום כוחני/התנתקות
         let myData = leaderboard.find(p => p.name === myName);
-        if (!myData) {
-            myData = { name: myName, answers: {} };
-        }
-        if (!myData.answers) {
-            myData.answers = {};
-        }
+        if (!myData) myData = { name: myName, answers: {} };
+        if (!myData.answers) myData.answers = {};
+        
         showFinalResults(leaderboard, myData);
     });
 
@@ -599,36 +602,53 @@
         });
 
         const comparisonContainer = document.getElementById('answers-comparison-container');
-        if (myData && myData.answers) {
-            let tableHtml = `
-                <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
-                    <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">השוואת תשובות:</h3>
-                    <table class="leaderboard-table comparison-table" style="margin-top:0;">
-                        <thead>
-                            <tr>
-                                <th>קטגוריה</th>
-                                <th class="my-col">התשובות שלי</th>`;
-            
-            const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
-            otherPlayers.forEach(p => {
-                tableHtml += `<th>${p.name}</th>`;
-            });
-            
-            tableHtml += `</tr></thead><tbody>`;
-
-            CATEGORIES.forEach(cat => {
-                tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
-                tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
-
-                otherPlayers.forEach(p => {
-                    const theirAns = p.answers ? p.answers[cat.label] : null;
-                    tableHtml += getAnswerCellHtml(theirAns);
+        const singleResults = document.getElementById('single-player-results');
+        
+        if (leaderboard.length === 1) {
+            if(singleResults) {
+                const breakdown = document.getElementById('answers-breakdown');
+                breakdown.innerHTML = '';
+                Object.keys(winner.answers).forEach(cat => {
+                    const ans = winner.answers[cat];
+                    const icon = ans.val === "דלג" ? "⚪" : (ans.isCorrect ? "✅" : "❌");
+                    breakdown.innerHTML += `<div style="margin-bottom: 5px;">${icon} ${cat}: <strong>${ans.val}</strong></div>`;
                 });
+                singleResults.style.display = 'block';
+            }
+            if(comparisonContainer) comparisonContainer.innerHTML = '';
+        } else if (leaderboard.length > 1) {
+            if(singleResults) singleResults.style.display = 'none';
+            if(comparisonContainer) {
+                let tableHtml = `
+                    <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
+                        <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">השוואת תשובות:</h3>
+                        <table class="leaderboard-table comparison-table" style="margin-top:0;">
+                            <thead>
+                                <tr>
+                                    <th>קטגוריה</th>
+                                    <th class="my-col">התשובות שלי</th>`;
+                
+                const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
+                otherPlayers.forEach(p => {
+                    tableHtml += `<th>${p.name}</th>`;
+                });
+                
+                tableHtml += `</tr></thead><tbody>`;
 
-                tableHtml += `</tr>`;
-            });
-            tableHtml += `</tbody></table></div>`;
-            comparisonContainer.innerHTML = tableHtml;
+                CATEGORIES.forEach(cat => {
+                    tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
+                    tableHtml += getAnswerCellHtml(myData.answers ? myData.answers[cat.label] : null);
+
+                    otherPlayers.forEach(p => {
+                        const theirAns = p.answers ? p.answers[cat.label] : null;
+                        tableHtml += getAnswerCellHtml(theirAns);
+                    });
+
+                    tableHtml += `</tr>`;
+                });
+                tableHtml += `</tbody></table></div>`;
+                comparisonContainer.innerHTML = tableHtml;
+            }
         }
         
         window.finalLeaderboard = leaderboard;
