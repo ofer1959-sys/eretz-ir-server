@@ -5,6 +5,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
+// הגנה קריטית: מניעת קריסת השרת מכל סיבה שהיא
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
+process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
@@ -16,7 +20,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני (כולל מנגנון הגנה נגד קריסות של 8 שניות)
+// שופט ג'מיני (כולל הגנת ניתוק והמתנה מקסימלית של 8 שניות למילה)
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
@@ -35,24 +39,10 @@ app.post('/api/ask-judge', async (req, res) => {
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
         {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
         
-        let isResolved = false;
-        const timeout = new Promise((resolve) => setTimeout(() => {
-            if (!isResolved) resolve({ timeout: true });
-        }, 8000));
+        const resultPromise = model.generateContent(prompt);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000));
         
-        const result = model.generateContent(prompt).then(r => {
-            isResolved = true;
-            return r;
-        }).catch(e => {
-            isResolved = true;
-            return { error: true };
-        });
-        
-        const response = await Promise.race([result, timeout]);
-        
-        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט התעכב)" });
-        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
-
+        const response = await Promise.race([resultPromise, timeoutPromise]);
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
@@ -102,6 +92,8 @@ io.on('connection', (socket) => {
 
     socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
         let room = rooms[roomId];
+        
+        // מנגנון התאוששות קריסות: אם השרת התאפס, מקימים את החדר מחדש שקוף למשתמש
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             const gameLetter = letters[Math.floor(Math.random() * letters.length)];
@@ -132,10 +124,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) {
-            socket.emit('gameError', 'השרת התאפס והחדר אבד. רעננו את הדף והתחילו משחק חדש.');
-            return;
-        }
+        if (!room) return;
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
