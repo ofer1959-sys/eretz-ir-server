@@ -39,8 +39,6 @@
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
-
-        /* חלונית התראות רחפת יפהפייה */
         #live-notifications { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none; width: 90%; max-width: 400px;}
     </style>
 </head>
@@ -50,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה 2</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה סופית</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -100,7 +98,7 @@
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות נבדקות כעת...</p>
-        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו (אם טרם סיימו) ותשובותיהם ייבדקו.</p>
+        <p style="color: #666; font-size: 1.1rem;">אנא המתן עד ששאר השחקנים יסיימו ותשובותיהם ייבדקו.</p>
         
         <div id="host-updates" style="margin-top: 20px; padding: 10px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.1rem;">עדכונים בחדר:</strong>
@@ -163,9 +161,9 @@
     let lastCorrectCount = 0;
     let lastTimeInSeconds = 0;
     const socket = io();
-    let currentRoom = '';
-    let isHost = false;
-    let myName = '';
+    let currentRoom = sessionStorage.getItem('currentRoom') || '';
+    let isHost = sessionStorage.getItem('isHost') === 'true';
+    let myName = sessionStorage.getItem('myName') || '';
 
     function showNotification(msg) {
         const notif = document.createElement('div');
@@ -201,11 +199,26 @@
             document.getElementById('room-code').value = urlParams.get('room');
             document.getElementById('join-section').style.display = 'block';
         }
+        if (myName) {
+            document.getElementById('player-name').value = myName;
+        }
     };
 
     socket.on('connect', () => {
         if (currentRoom && myName) {
             socket.emit('joinRoom', { roomId: currentRoom, playerName: myName, isHostClaim: isHost });
+
+            const activeScreen = document.querySelector('.screen.active');
+            if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
+                setTimeout(() => {
+                    socket.emit('submitScore', { 
+                        roomId: currentRoom, 
+                        correctCount: lastCorrectCount, 
+                        timeInSeconds: lastTimeInSeconds, 
+                        answers: playerAnswers 
+                    });
+                }, 1000);
+            }
         }
     });
 
@@ -223,6 +236,8 @@
             return;
         }
         isHost = true;
+        sessionStorage.setItem('myName', myName);
+        sessionStorage.setItem('isHost', 'true');
         socket.emit('createRoom', myName);
     }
 
@@ -245,6 +260,10 @@
         currentRoom = room;
         isMultiplayerMode = true;
         isHost = false;
+        sessionStorage.setItem('myName', myName);
+        sessionStorage.setItem('isHost', 'false');
+        sessionStorage.setItem('currentRoom', currentRoom);
+        
         socket.emit('joinRoom', { roomId: room, playerName: myName, isHostClaim: false });
         
         showScreen('lobby');
@@ -262,6 +281,7 @@
         isMultiplayerMode = true;
         currentRoom = data.roomId;
         currentLetter = data.letter;
+        sessionStorage.setItem('currentRoom', currentRoom);
         document.getElementById('display-room-code').innerText = currentRoom;
         document.getElementById('host-controls').style.display = 'block';
         updateLobby(data.players);
@@ -272,6 +292,7 @@
         currentLetter = data.letter;
         currentRoom = data.roomId;
         isHost = data.isHost;
+        sessionStorage.setItem('isHost', isHost ? 'true' : 'false');
 
         const activeScreen = document.querySelector('.screen.active');
         if (activeScreen && (activeScreen.id === 'game-screen' || activeScreen.id === 'waiting-results' || activeScreen.id === 'results' || activeScreen.id === 'countdown-screen')) {
@@ -292,6 +313,7 @@
 
     socket.on('gameError', (msg) => {
         alert(msg);
+        sessionStorage.removeItem('currentRoom');
         location.reload();
     });
 
@@ -403,10 +425,17 @@
         });
     }
 
+    const fetchWithTimeout = (url, options, timeout = 8000) => {
+        return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+        ]);
+    };
+
     async function checkWordWithServer(catLabel, val) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5500);
+            const timeoutId = setTimeout(() => controller.abort(), 5500); 
             
             const res = await fetch('/api/ask-judge', {
                 method: 'POST',
@@ -420,7 +449,7 @@
             const data = await res.json();
             return { isValid: !!data.isValid, reason: data.reason || '' };
         } catch(e) {
-            return { isValid: true, reason: "אושר מחמת הספק (השופט נתקע)" };
+            return { isValid: true, reason: "אושר מחמת הספק" };
         }
     }
 
@@ -479,7 +508,7 @@
     }
 
     socket.on('playerAnnouncedFinish', (playerName) => {
-        showNotification(`🔔 <strong>${playerName}</strong> סיימ/ה את המשחק!`);
+        showNotification(`🔔 השחקן/ית <strong>${playerName}</strong> סיים/ה את המשחק!`);
     });
 
     socket.on('playerFinishedStatus', (data) => {
@@ -490,7 +519,7 @@
         if (data.submittedCount >= data.totalPlayers) {
             statusText.innerText = "כולם סיימו! מעבד תוצאות...";
         } else if (hasSubmittedCurrentRound) {
-            statusText.innerHTML = `הבדיקה שלך הסתיימה!<br>ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
+            statusText.innerHTML = `הבדיקה הסתיימה! ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
         }
         
         if (list) {
@@ -518,12 +547,19 @@
     }
 
     socket.on('gameOver', (leaderboard) => {
-        const myData = leaderboard.find(p => p.name === myName);
+        // הגנה מפני קריסה אם הנתונים חסרים בעקבות סיום כוחני/התנתקות
+        let myData = leaderboard.find(p => p.name === myName);
+        if (!myData) {
+            myData = { name: myName, answers: {} };
+        }
+        if (!myData.answers) {
+            myData.answers = {};
+        }
         showFinalResults(leaderboard, myData);
     });
 
     function getAnswerCellHtml(ans) {
-        if (!ans || ans.val === "דלג" || ans.val === "---") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
+        if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
         let status = '';
         if (ans.isCorrect) {
             if (ans.feedback) status = '<br><span style="color:green; font-size:0.8em;">🤖 אושר (שופט)</span>';
