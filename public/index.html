@@ -95,7 +95,8 @@
 
     <div id="waiting-results" class="screen">
         <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
-        <p>התשובות נשלחות לבדיקת השופט... ממתינים לכולם.</p>
+        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0;">מכין תשובות...</p>
+        <p style="color: #666;">אנא המתן ששאר השחקנים יסיימו את המשחק.</p>
     </div>
 
     <div id="results" class="screen">
@@ -199,6 +200,11 @@
 
     socket.on('updatePlayers', (players) => updateLobby(players));
 
+    socket.on('gameError', (msg) => {
+        alert(msg);
+        location.reload();
+    });
+
     function updateLobby(players) {
         const ul = document.getElementById('players-list');
         ul.innerHTML = '';
@@ -295,6 +301,14 @@
         });
     }
 
+    // עטיפת fetch ב-timeout למקרה שג'מיני ייתקע
+    const fetchWithTimeout = (url, options, timeout = 8000) => {
+        return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout))
+        ]);
+    };
+
     async function submitGame() {
         clearInterval(timerInterval);
         
@@ -306,6 +320,7 @@
         let correctCount = 0;
         
         showScreen('waiting-results');
+        const statusText = document.getElementById('checking-status');
 
         for (const cat of CATEGORIES) {
             const val = document.getElementById('input-' + cat.id).value.trim();
@@ -322,19 +337,21 @@
                     isCorrect = true;
                     correctCount++;
                 } else {
+                    // עדכון טקסט כדי לדעת איפה זה אוחז
+                    statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
                     try {
-                        const res = await fetch('/api/ask-judge', {
+                        const res = await fetchWithTimeout('/api/ask-judge', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ category: cat.label, letter: currentLetter, answer: val })
-                        });
+                        }, 8000);
                         const aiData = await res.json();
                         isCorrect = aiData.isValid;
                         feedback = aiData.reason || '';
                         if (isCorrect) correctCount++;
                     } catch(e) {
                         isCorrect = true;
-                        feedback = "אושר מחמת הספק";
+                        feedback = "אושר מחמת הספק (עומס על השופט)";
                         correctCount++;
                     }
                 }
@@ -342,6 +359,8 @@
             playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
         }
         
+        statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
+
         if (isMultiplayerMode) {
             socket.emit('submitScore', { roomId: currentRoom, correctCount, timeInSeconds, answers: playerAnswers });
         } else {
@@ -361,7 +380,6 @@
         showFinalResults(leaderboard, myData);
     });
 
-    // מחולל עיצוב לתא בטבלת התשובות
     function getAnswerCellHtml(ans) {
         if (!ans || ans.val === "דלג" || ans.val === "---") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
         let status = '';
@@ -385,7 +403,6 @@
         speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "סיימת את המשחק.");
         setTimeout(() => { speak("יופי, הצלחה נאה בארץ עיר. אפשר לשחק שוב."); }, 2500);
 
-        // טבלת הדירוג העליונה
         const tbody = document.getElementById('leaderboard-body');
         tbody.innerHTML = '';
         leaderboard.forEach((p, idx) => {
@@ -403,7 +420,6 @@
                 </tr>`;
         });
 
-        // יצירת טבלת השוואת התשובות
         const comparisonContainer = document.getElementById('answers-comparison-container');
         if (myData && myData.answers) {
             let tableHtml = `
@@ -424,11 +440,8 @@
 
             CATEGORIES.forEach(cat => {
                 tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
-                
-                // התשובה שלי
                 tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
 
-                // תשובות שאר השחקנים
                 otherPlayers.forEach(p => {
                     const theirAns = p.answers ? p.answers[cat.label] : null;
                     tableHtml += getAnswerCellHtml(theirAns);
