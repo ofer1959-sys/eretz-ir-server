@@ -5,7 +5,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
-// הגנה נגד קריסות שרת
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
@@ -38,28 +37,16 @@ app.post('/api/ask-judge', async (req, res) => {
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
         {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
         
-        let isResolved = false;
-        const timeout = new Promise((resolve) => setTimeout(() => {
-            if (!isResolved) resolve({ timeout: true });
-        }, 8000));
+        // הגנה קריטית בשרת: גג 5 שניות לתשובה מג'מיני
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+        const resultPromise = model.generateContent(prompt);
         
-        const result = model.generateContent(prompt).then(r => {
-            isResolved = true;
-            return r;
-        }).catch(e => {
-            isResolved = true;
-            return { error: true };
-        });
-        
-        const response = await Promise.race([result, timeout]);
-        
-        if (response.timeout) return res.json({ isValid: true, reason: "אושר (השופט התעכב)" });
-        if (response.error) return res.json({ isValid: true, reason: "אושר (שגיאת שופט)" });
-
+        const response = await Promise.race([resultPromise, timeoutPromise]);
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        res.json({ isValid: true, reason: "אושר מחמת הספק" });
+        // שגיאת בטיחות של ג'מיני או טיימאאוט
+        res.json({ isValid: true, reason: "אושר (השופט עסוק)" });
     }
 });
 
@@ -96,7 +83,7 @@ io.on('connection', (socket) => {
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
         const gameLetter = letters[Math.floor(Math.random() * letters.length)];
         
-        rooms[roomId] = { players: [], letter: gameLetter, gameStarted: false };
+        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
         socket.join(roomId);
         rooms[roomId].players.push({ id: socket.id, name: hostName, isHost: true, hasSubmitted: false });
         
@@ -108,7 +95,7 @@ io.on('connection', (socket) => {
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             const gameLetter = letters[Math.floor(Math.random() * letters.length)];
-            rooms[roomId] = { players: [], letter: gameLetter, gameStarted: false };
+            rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
             room = rooms[roomId];
         }
 
@@ -141,29 +128,25 @@ io.on('connection', (socket) => {
         }
         
         const player = room.players.find(p => p.id === socket.id);
-        if (player) {
+        if (player && !player.hasSubmitted) {
             player.correctCount = correctCount;
             player.time = timeInSeconds;
             player.answers = answers;
             player.hasSubmitted = true;
+            room.submittedCount++;
             
-            const submittedCount = room.players.filter(p => p.hasSubmitted).length;
             const waitingFor = room.players.filter(p => !p.hasSubmitted).map(p => p.name);
-            
             io.to(roomId).emit('playerFinished', {
                 playerName: player.name,
-                submittedCount: submittedCount,
+                submittedCount: room.submittedCount,
                 totalPlayers: room.players.length,
                 waitingFor: waitingFor
             });
 
-            if (submittedCount >= room.players.length) {
-                calculateAndSendResults(roomId);
-            }
+            if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
         }
     });
-    
-    // כפתור כוח למנהל התחרות במקרה שמישהו נתקע
+
     socket.on('forceEndGame', (roomId) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -180,7 +163,7 @@ io.on('connection', (socket) => {
             calculateAndSendResults(roomId);
         }
     });
-
+    
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
