@@ -32,10 +32,10 @@
         .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
         .gold-medal { font-size: 1.5rem; }
         
-        .comparison-table { min-width: 100%; font-size: 0.9rem; }
+        .comparison-table { min-width: 600px; font-size: 0.9rem; }
         .comparison-table th { background-color: #34495e; }
         .comparison-table th.my-col { background-color: var(--secondary); }
-        .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
+        .comparison-table td { vertical-align: top; border: 1px solid #eee;}
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
@@ -48,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה סופית</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה 5 - מנצחת!</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -116,7 +116,12 @@
             <tbody id="leaderboard-body"></tbody>
         </table>
 
-        <div id="answers-comparison-container" style="overflow-x: auto;"></div>
+        <div id="single-player-results" style="display:none; margin-top:20px; text-align:right; background:#f9f9f9; padding:15px; border-radius:10px;">
+            <h3 style="margin-top:0;">פירוט התשובות שלך:</h3>
+            <div id="answers-breakdown"></div>
+        </div>
+
+        <div id="answers-comparison-container"></div>
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
@@ -135,7 +140,6 @@
         professions: `אדריכל,אדריכלית,אגרונום,אגרונומית,אונקולוג,אונקולוגית,אופטיקאי,אופטיקאית,אורולוג,אורולוגית,אורתופד,אורתופדית,אח,אחות,אטליזן,אטליזנית,איכר,איכרה,אינסטלטור,אינסטלטורית,איש אבטחה,אשת אבטחה,איש מכירות,אשת מכירות,איש סיעוד,אשת סיעוד,איש סייבר,אשת סייבר,איש שיווק,אשת שיווק,אנימטור,אנימטורית,אסטרונום,אסטרונומית,אפידמיולוג,אפידמיולוגית,אקטואר,אקטוארית,ארכיאולוג,ארכיאולוגית,בוחן רכב,בוחנת רכב,בוטנאי,בוטנאית,בורר,בוררת,ביולוג,ביולוגית,בלש,בלשית,במאי,במאית,ברמן,ברמנית,גאולוג,גאולוגית,גבבן,גבבנית,גנן,גננת,גרפיקאי,גרפיקאית,דבוראי,דבוראית,דובר,דוברת,דוגמן,דוגמנית,דוקטור,דוקטורית,דיקן,דיקנית,דייל,דיילת,דייל מכירות,דיילת מכירות,דיפלומט,דיפלומטית,דייג,דייגת,דרמטולוג,דרמטולוגית,היסטוריון,היסטוריונית,הידרולוג,הידרולוגית,ווטרינר,ווטרינרית,זגג,זגגית,זבן,זבנית,זמר,זמרת,חוקר,חוקרת,חזאי,חזאית,חייט,חייטת,חייל,חיילת,חלילן,חלילנית,חנקין,חנקינית,חשמלאי,חשמלאית,חקלאי,חקלאית,חוואי,חוואית,חובש,חובשת,טבח,טבחת,טייח,טייחת,טייס,טייסת,טכנאי,טכנאית,יועץ חינוכי,יועצת חינוכית,יועץ פרישה,יועצת פרישה,יינן,ייננית,ימאי,ימאית,כימאי,כימאית,כלבן,כלבנית,כלכלן,כלכלנית,כבאי,כבאית,כנר,כנרת,כוריאוגרף,כוריאוגרפית,כרטיסן,כרטיסנית,כתב,כתבת,לבורנט,לבורנטית,מאגד נתונים,מאגדת נתונים,מאייר,מאיירת,מאמן,מאמנת,מאפר,מאפרת,מארגן אירועים,מארגנת אירועים,מדבב,מדבבת,מדריך,מדריכה,מדריך ברידג',מדריכת ברידג',מהנדס,מהנדסת,מוזיקאי,מוזיקאית,מורה,מורה דרך,מורת דרך,מחנך,מחנכת,מחסנאי,מחסנאית,מטפל,מטפלת,מיילד,מיילדת,מיקרוביולוג,מיקרוביולוגית,מכונאי,מכונאית,מלצר,מלצרית,מנהל,מנהלת,מנהל חשבונות,מנהלת חשבונות,מנהל מוצר,מנהלת מוצר,מנהל פרויקטים,מנהלת פרויקטים,מנהל משאבי אנוש,מנהלת משאבי אנוש,מנחה,מנקה,מנעולן,מנעולנית,מנתח,מנתחת,מנתח מערכות,מנתחת מערכות,מסגר,מסגרית,מעבד נתונים,מעבדת נתונים,מעצב,מעצבת,מעצב אופנה,מעצבת אופנה,מעצב ממשק משתמש,מעצבת ממשק משתמש,מפיק,מפיקה,מציל,מצילה,מרדים,מרדימה,מרכז לוגיסטי,מרכזת לוגיסטית,מרפא בעיסוק,מרפאה בעיסוק,מרצה,משווק,משווקת,משורר,משוררת,משפטן,משפטנית,מתכנת,מתכנתת,נגר,נגרית,נהג,נהגת,נוירולוג,נוירולוגית,נוטריון,נוטריונית,נטורופת,נטורופתית,סבל,סבלית,סוכן ביטוח,סוכנת ביטוח,סוכן נסיעות,סוכנת נסיעות,סוציולוג,סוציולוגית,סופר,סופרת,סדרן,סדרנית,סטטיסטיקאי,סטטיסטיקאית,ספר,ספרית,ספורטאי,ספורטאית,עגורנאי,עגורנאית,עובד סוציאלי,עובדת סוציאלית,עובד ייצור,עובדת ייצור,עוזר פרלמנטרי,עוזרת פרלמנטרית,עורך,עורכת,עורך דין,עורכת דין,עיתונאי,עיתונאית,עקר בית,עקרת בית,פועל בניין,פועלת בניין,פטיסייר,פטיסיירית,פיזיותרפיסט,פיזיותרפיסטית,פיזיקאי,פיזיקאית,פילוסוף,פילוסופית,פסל,פסלת,פסנתרן,פסנתרנית,פקיד,פקידה,פקיד קבלה,פקידת קבלה,פרמדיק,פרמדיקית,פרופסור,פרופסורית,פסיכולוג,פסיכולוגית,פסיכיאטר,פסיכיאטרית,פקח טיסה,פקחית טיסה,צורף,צורפת,צייר,ציירת,צלם,צלמת,צבע,צבעית,קבלן,קבלנית,קברניט,קברניטית,קונדיטור,קונדיטורית,קופאי,קופאית,קלדן,קלדנית,קלינאי תקשורת,קלינאית תקשורת,קמעונאי,קמעונאית,קצין,קצינה,קרדיולוג,קרדיולוגית,רב,רבנית,רדיולוג,רדיולוגית,רואה חשבון,רואת חשבון,רופא,רופאה,רוקח,רוקחת,רכז גיוס,רכזת גיוס,רפד,רפדית,רצף,רצפת,רקדן,רקדנית,רתך,רתכת,שואב אבק (מפעיל),שואבת אבק (מפעילה),שומר,שומרת,שחקן,שחקנית,שליח,שליחה,שמאי,שמאית,שען,שענית,שף,שפית,שוטר,שוטרת,שופט,שופטת,שרברב,שרברבית,תובע,תובעת,תזונאי,תזונאית,תסריטאי,תסריטאית,תכשיטן,תכשיטנית,תרפיסט,תרפיסטית,מאבטח,מאבטחת,אח,אחות,זבן,זבנית,חקלאי,חקלאית,איכר,איכרה,במאי,שמאי,במאית,שמאית,חשמלאי,חשמלאית,דייג,דייגת,דייגית,צפורה,ציפורה`
     };
 
-    // מייעל את המאגרים בזיכרון, פותר כל אפשרות לקפיאה!
     const NORMALIZED_DATA = {};
     for (let key in RAW_DATA) {
         const rawWords = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
@@ -188,12 +192,14 @@
     }
 
     function unlockAudio() {
-        if (!window.audioUnlocked) {
-            const silentUtter = new SpeechSynthesisUtterance('');
-            silentUtter.volume = 0;
-            window.speechSynthesis.speak(silentUtter);
-            window.audioUnlocked = true;
-        }
+        try {
+            if (!window.audioUnlocked) {
+                const silentUtter = new SpeechSynthesisUtterance('');
+                silentUtter.volume = 0;
+                window.speechSynthesis.speak(silentUtter);
+                window.audioUnlocked = true;
+            }
+        } catch(e) {}
     }
 
     window.onload = () => {
@@ -210,7 +216,6 @@
     socket.on('connect', () => {
         if (currentRoom && myName) {
             socket.emit('joinRoom', { roomId: currentRoom, playerName: myName, isHostClaim: isHost });
-
             const activeScreen = document.querySelector('.screen.active');
             if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
                 setTimeout(() => {
@@ -336,6 +341,11 @@
         document.querySelector('#host-controls button').disabled = true;
         socket.emit('startGame', currentRoom);
     }
+
+    socket.on('gameStarted', (letter) => {
+        currentLetter = letter;
+        startCountdownSequence();
+    });
 
     function startSoloGame() {
         unlockAudio();
@@ -471,7 +481,7 @@
                 waitMsg.style.display = 'block';
                 socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
             } else {
-                waitMsg.style.display = 'none'; // מוסתר במשחק יחיד
+                waitMsg.style.display = 'none'; 
             }
         }
 
@@ -582,90 +592,99 @@
         return `<td style="vertical-align:middle;"><strong>${ans.val}</strong>${status}</td>`;
     }
 
-    // פונקציה לבניית שורה מפורטת למשחק יחיד
-    function getAnswerDivHtml(cat, ans) {
-        if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---") return `<div style="margin-bottom: 8px;">⚪ <strong>${cat}:</strong> דילג</div>`;
-        let status = '';
-        if (ans.isCorrect) {
-            if (ans.feedback) status = '<span style="color:green; font-size:0.9em;">🤖 אושר (שופט)</span>';
-            else status = '<span style="color:green; font-size:0.9em;">✅ אושר (מאגר)</span>';
-        } else {
-            status = '<span style="color:red; font-size:0.9em;">❌ נפסל</span>';
-            if (ans.feedback) status += ` <span style="font-size:0.85em; color:#666;">(${ans.feedback})</span>`;
-        }
-        return `<div style="margin-bottom: 8px;"><strong>${cat}:</strong> ${ans.val} &nbsp; ${status}</div>`;
-    }
-
     function showFinalResults(leaderboard, myData) {
-        showScreen('results');
-        if (!leaderboard || leaderboard.length === 0) return;
-        
-        if (!myData) {
-            myData = leaderboard.find(p => p.name === myName);
-            if (!myData) myData = { name: myName, answers: playerAnswers };
-        }
-
-        const winner = leaderboard[0];
-        
-        const winnerText = leaderboard.length > 1 ? `המנצח הוא ${winner.name}! 🏆` : `סיימת את המשחק!`;
-        document.getElementById('winner-announcement').innerText = winnerText;
-        
-        speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "סיימת את המשחק.");
-        setTimeout(() => { speak("יופי, הצלחה נאה בארץ עיר. אפשר לשחק שוב."); }, 2500);
-
-        const tbody = document.getElementById('leaderboard-body');
-        tbody.innerHTML = '';
-        leaderboard.forEach((p, idx) => {
-            let placeIcon = idx + 1;
-            if (idx === 0) placeIcon = "🥇";
-            else if (idx === 1) placeIcon = "🥈";
-            else if (idx === 2) placeIcon = "🥉";
+        try {
+            showScreen('results');
+            if (!leaderboard || leaderboard.length === 0) return;
             
-            tbody.innerHTML += `
-                <tr>
-                    <td class="${idx === 0 ? 'gold-medal' : ''}">${placeIcon}</td>
-                    <td><strong>${p.name}</strong></td>
-                    <td>${p.finalScore !== undefined ? p.finalScore : p.score}</td>
-                    <td style="color:#666;">${p.time === 999 ? 'פרש' : p.time + " שנ'"}</td>
-                </tr>`;
-        });
+            if (!myData) {
+                myData = leaderboard.find(p => p.name === myName);
+                if (!myData) myData = { name: myName, answers: playerAnswers };
+            }
 
-        const comparisonContainer = document.getElementById('answers-comparison-container');
-        if (comparisonContainer && myData && myData.answers) {
-            let tableHtml = `
-                <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
-                    <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">
-                        ${leaderboard.length > 1 ? 'השוואת תשובות:' : 'פירוט התשובות שלך:'}
-                    </h3>
-                    <table class="leaderboard-table comparison-table" style="margin-top:0;">
-                        <thead>
-                            <tr>
-                                <th>קטגוריה</th>
-                                <th class="my-col">${leaderboard.length > 1 ? 'התשובות שלי' : myData.name}</th>`;
-            
-            const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
-            otherPlayers.forEach(p => {
-                tableHtml += `<th>${p.name}</th>`;
+            const winner = leaderboard[0];
+            const winnerText = leaderboard.length > 1 ? `המנצח הוא ${winner.name}! 🏆` : `סיימת את המשחק!`;
+            document.getElementById('winner-announcement').innerText = winnerText;
+
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+            leaderboard.forEach((p, idx) => {
+                let placeIcon = idx + 1;
+                if (idx === 0) placeIcon = "🥇";
+                else if (idx === 1) placeIcon = "🥈";
+                else if (idx === 2) placeIcon = "🥉";
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="${idx === 0 ? 'gold-medal' : ''}">${placeIcon}</td>
+                        <td><strong>${p.name}</strong></td>
+                        <td>${p.finalScore !== undefined ? p.finalScore : p.score}</td>
+                        <td style="color:#666;">${p.time === 999 ? 'פרש' : p.time + " שנ'"}</td>
+                    </tr>`;
             });
+
+            const comparisonContainer = document.getElementById('answers-comparison-container');
+            const singleResults = document.getElementById('single-player-results');
             
-            tableHtml += `</tr></thead><tbody>`;
+            if (leaderboard.length === 1) {
+                if(singleResults && myData && myData.answers) {
+                    const breakdown = document.getElementById('answers-breakdown');
+                    breakdown.innerHTML = '';
+                    Object.keys(myData.answers).forEach(cat => {
+                        const ans = myData.answers[cat];
+                        const icon = ans.val === "דלג" ? "⚪" : (ans.isCorrect ? "✅" : "❌");
+                        let fb = (!ans.isCorrect && ans.val !== "דלג" && ans.feedback) ? ` <span style="font-size:0.85em; color:#666;">(${ans.feedback})</span>` : '';
+                        breakdown.innerHTML += `<div style="margin-bottom: 5px;">${icon} ${cat}: <strong>${ans.val}</strong>${fb}</div>`;
+                    });
+                    singleResults.style.display = 'block';
+                }
+                if(comparisonContainer) comparisonContainer.innerHTML = '';
+            } else if (leaderboard.length > 1) {
+                if(singleResults) singleResults.style.display = 'none';
+                if(comparisonContainer && myData && myData.answers) {
+                    let tableHtml = `
+                        <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
+                            <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">השוואת תשובות:</h3>
+                            <table class="leaderboard-table comparison-table" style="margin-top:0;">
+                                <thead>
+                                    <tr>
+                                        <th>קטגוריה</th>
+                                        <th class="my-col">התשובות שלי</th>`;
+                    
+                    const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
+                    otherPlayers.forEach(p => {
+                        tableHtml += `<th>${p.name}</th>`;
+                    });
+                    
+                    tableHtml += `</tr></thead><tbody>`;
 
-            CATEGORIES.forEach(cat => {
-                tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
-                tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
+                    CATEGORIES.forEach(cat => {
+                        tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
+                        tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
 
-                otherPlayers.forEach(p => {
-                    const theirAns = p.answers ? p.answers[cat.label] : null;
-                    tableHtml += getAnswerCellHtml(theirAns);
-                });
+                        otherPlayers.forEach(p => {
+                            const theirAns = p.answers ? p.answers[cat.label] : null;
+                            tableHtml += getAnswerCellHtml(theirAns);
+                        });
 
-                tableHtml += `</tr>`;
-            });
-            tableHtml += `</tbody></table></div>`;
-            comparisonContainer.innerHTML = tableHtml;
+                        tableHtml += `</tr>`;
+                    });
+                    tableHtml += `</tbody></table></div>`;
+                    comparisonContainer.innerHTML = tableHtml;
+                }
+            }
+            
+            window.finalLeaderboard = leaderboard;
+
+            // הפעלת הקול מוגנת ומושהית כדי לא להקריס את המסך
+            setTimeout(() => {
+                speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "סיימת את המשחק.");
+                setTimeout(() => { speak("יופי, הצלחה נאה בארץ עיר. אפשר לשחק שוב."); }, 2500);
+            }, 500);
+
+        } catch (err) {
+            console.error("שגיאה בהצגת התוצאות:", err);
         }
-        
-        window.finalLeaderboard = leaderboard;
     }
 
     function playAgainInSameRoom() {
@@ -688,6 +707,19 @@
             document.getElementById('waiting-msg').style.display = 'block';
         }
     });
+
+    function speak(text) {
+        try {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'he-IL';
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        } catch(e) {
+            console.log("Audio skipped");
+        }
+    }
 
     function shareResultsWhatsApp() {
         const board = window.finalLeaderboard;
