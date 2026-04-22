@@ -16,36 +16,41 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני בגישה מקלה עם מנגנון הגנה נגד קריסות (Timeout)
+// שופט ג'מיני - גרסה מעודכנת עם חוקים מדויקים
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט סלחן מאוד במשחק "ארץ עיר".
-        הקטגוריה: "${category}", האות: "${letter}", התשובה: "${answer}".
-        הוראה קריטית: הגישה שלך חייבת להיות מקלה! אם זה לא טעות מוחלטת, תאשר. קבל שגיאות כתיב, כתיב חסר/מלא, סלנג נפוץ או הטיות (זכר/נקבה, יחיד/רבים).
-        החזר אך ורק JSON תקין במבנה הבא ללא טקסט נוסף: {"isValid": true/false, "reason": "הסבר קצר"}`;
+        const prompt = `אתה שופט חכם והוגן במשחק "ארץ עיר".
+        הקטגוריה: "${category}", האות: "${letter}", התשובה שהשחקן כתב: "${answer}".
+        עליך להחליט האם לאשר את התשובה לפי הכללים הבאים:
+        1. התשובה חייבת להתחיל באות הנכונה "${letter}". אם לא - פסול.
+        2. פסול לחלוטין מילים שהן ג'יבריש ברור או שורת אותיות חסרת משמעות.
+        3. מותרת שגיאת כתיב של אות אחת (בתנאי שזו לא האות הראשונה).
+        4. התעלם מעודף או חוסר באותיות 'א' ו-'י' (אשר את המילה גם אם חסר או נוסף א/י).
+        5. אם המילה קשורה לנושא ויש סיכוי טוב שהיא עונה להגדרה - אשר.
+        6. בקטגוריות "שם של בן" או "שם של בת" - אשר שמות לועזיים אם הם נפוצים בחו"ל.
+        7. בקטגוריות "איבר גוף", "צומח", ו"מאכל" - אשר אם נכתב השם המדעי או הלועזי המקובל.
+
+        החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
+        {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
         
-        // Timeout של 8 שניות לפנייה לג'מיני, כדי לא לתקוע את המשתמש
         const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 8000));
         const resultPromise = model.generateContent(prompt);
-        
         const response = await Promise.race([resultPromise, timeoutPromise]);
         
         if (response.timeout) {
-             console.log("Gemini API Timeout - Auto approving");
-             return res.json({ isValid: true, reason: "אישרנו אוטומטית (השופט קצת איטי עכשיו)" });
+             return res.json({ isValid: true, reason: "אושר (השופט איטי)" });
         }
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        console.error("Gemini Error:", e);
-        res.json({ isValid: true, reason: "אישרנו מחמת הספק (שגיאה אצל השופט)" });
+        res.json({ isValid: true, reason: "אושר מחמת הספק" });
     }
 });
 
-// ניהול תחרות מרובת משתתפים
+// ניהול חדרים ותקשורת רשת
 io.on('connection', (socket) => {
     socket.on('createRoom', (hostName) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -62,7 +67,6 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', ({ roomId, playerName }) => {
         const room = rooms[roomId];
         if (room) {
-            // בדיקה ששחקן לא נכנס פעמיים בטעות
             const existingPlayer = room.players.find(p => p.id === socket.id);
             if (!existingPlayer) {
                 socket.join(roomId);
@@ -81,24 +85,20 @@ io.on('connection', (socket) => {
         if (!room) return;
         
         const player = room.players.find(p => p.id === socket.id);
-        if (player && !player.hasSubmitted) { // מוודאים שסופרים כל שחקן פעם אחת בלבד
+        if (player && !player.hasSubmitted) {
             player.correctCount = correctCount;
             player.time = timeInSeconds;
             player.answers = answers;
             player.hasSubmitted = true;
             room.submittedCount++;
-            
-            console.log(`Room ${roomId}: Player ${player.name} finished. (${room.submittedCount}/${room.players.length})`);
         }
 
-        // כשכולם מסיימים - חישוב תוצאות סופיות לפי הכללים שלך
+        // כשכולם מסיימים
         if (room.submittedCount === room.players.length) {
-            console.log(`Room ${roomId}: All players finished. Calculating scores...`);
             const minTime = Math.min(...room.players.map(p => p.time));
             
             room.players.forEach(p => {
                 let score = p.correctCount * 10;
-                
                 if (minTime > 0) {
                     const excessRatio = (p.time - minTime) / minTime;
                     if (excessRatio > 0.50) {
@@ -109,7 +109,6 @@ io.on('connection', (socket) => {
                 p.finalScore = Math.max(0, score);
             });
 
-            // מיון: קודם לפי ציון, ואז לפי זמן במקרה של תיקו
             room.players.sort((a, b) => {
                 if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
                 return a.time - b.time;
@@ -117,14 +116,10 @@ io.on('connection', (socket) => {
 
             io.to(roomId).emit('gameOver', room.players);
             
-            // ניקוי החדר לאחר 10 שניות כדי למנוע דליפות זיכרון, אבל לא מיד
-            setTimeout(() => {
-                delete rooms[roomId];
-            }, 10000);
+            setTimeout(() => { delete rooms[roomId]; }, 10000);
         }
     });
     
-    // ניקוי שחקנים שמתנתקים באמצע (סוגרים את הדפדפן לפני הסיום)
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
@@ -132,21 +127,17 @@ io.on('connection', (socket) => {
             
             if (playerIndex !== -1) {
                 const player = room.players[playerIndex];
-                // אם המשחק עדיין לא התחיל (אפס מגישים), אפשר להסיר אותו מהלובי
                 if (room.submittedCount === 0) {
                     room.players.splice(playerIndex, 1);
                     io.to(roomId).emit('updatePlayers', room.players);
-                } 
-                // אם המשחק התחיל, והוא יצא לפני שסיים, נסמן אותו כמי שסיים עם 0 כדי לא לתקוע את כולם
-                else if (!player.hasSubmitted) {
+                } else if (!player.hasSubmitted) {
                     player.hasSubmitted = true;
                     player.correctCount = 0;
-                    player.time = 999; // עונש זמן מירבי
+                    player.time = 999; 
                     player.answers = {};
                     room.submittedCount++;
                     
                     if (room.submittedCount === room.players.length) {
-                        // אותה לוגיקת סיום כמו קודם (שמתי כאן כדי לא להאריך את הקוד כרגע)
                         io.to(roomId).emit('gameOver', room.players); 
                     }
                 }
