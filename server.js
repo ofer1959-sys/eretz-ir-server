@@ -5,6 +5,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
+// הגנה נגד קריסות שרת פתאומיות
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
@@ -19,29 +20,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט ג'מיני עם טיימר ברזל של 5 שניות
+// שופט ג'מיני - גרסה קפדנית ומדויקת
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט חכם והוגן במשחק "ארץ עיר".
-        הקטגוריה: "${category}", האות: "${letter}", התשובה שהשחקן כתב: "${answer}".
-        עליך להחליט האם לאשר את התשובה לפי הכללים הבאים:
-        1. התשובה חייבת להתחיל באות הנכונה "${letter}". אם לא - פסול.
-        2. פסול לחלוטין מילים שהן ג'יבריש ברור או שורת אותיות חסרת משמעות.
-        3. מותרת שגיאת כתיב של אות אחת (בתנאי שזו לא האות הראשונה).
-        4. התעלם מעודף או חוסר באותיות 'א' ו-'י'.
-        5. אם המילה קשורה לנושא ויש סיכוי טוב שהיא עונה להגדרה - אשר.
-        6. בקטגוריות "שם של בן" או "שם של בת" - אשר שמות לועזיים אם הם נפוצים בחו"ל.
-        7. בקטגוריות "איבר גוף", "צומח", ו"מאכל" - אשר גם שם מדעי או לועזי מקובל.
+        const prompt = `אתה שופט קפדן והוגן במשחק "ארץ עיר" בעברית.
+        הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה של השחקן: "${answer}".
+        עליך לשפוט לפי כללי הברזל הבאים:
+        1. האות הראשונה קובעת: המילה התקנית והנכונה חייבת להתחיל באות "${letter}". אם השחקן כתב מילה עם שגיאת כתיב באות הראשונה (למשל "אגבניה" באות א', במקום "עגבניה") - חובה עליך לפסול!
+        2. דיוק עובדתי: פסול דברים שאינם נכונים עובדתית לקטגוריה. למשל: "אילת" או "תל אביב" אינן ערי בירה - פסול אותן בקטגוריה זו.
+        3. שגיאות כתיב קלות: מותר לאשר שגיאת כתיב של אות אחת (למשל החלפה בין ט/ת או כ/ק), אך ורק אם השגיאה היא באמצע או בסוף המילה.
+        4. אותיות אהו"י: אשר מילה גם אם יש בה חוסר או עודף של אותיות א' או י'.
+        5. מילים זרות: בקטגוריות "שם של בן" או "שם של בת", אשר שמות לועזיים אם הם מוכרים ונפוצים. באיברי גוף, צומח ומאכל, מותר לאשר שם לועזי או מדעי מקובל.
+        6. פסול לחלוטין מילים שהן ג'יבריש ברור או המצאות.
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה:
-        {"isValid": true/false, "reason": "הסבר קצר של 2-3 מילים"}`;
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא הערות markdown) במבנה הבא:
+        {"isValid": true/false, "reason": "הסבר קצר של 2-4 מילים"}`;
         
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
-        }, 5000));
+        }, 5500));
         
         const result = model.generateContent(prompt).then(r => {
             isResolved = true; return r;
@@ -133,7 +133,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('gameError', 'השרת התאפס והחדר אבד. רעננו את הדף והתחילו מחדש.');
+        if (!room) return socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. נאלץ להתחיל משחק חדש.');
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
@@ -208,7 +208,7 @@ io.on('connection', (socket) => {
                             rooms[roomId].submittedCount++;
                             if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId);
                         }
-                    }, 60000);
+                    }, 120000); 
                 }
             }
         }
