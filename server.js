@@ -16,11 +16,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "MISSING_KEY");
+// ניסיון להתחבר לגוגל, אם אין מפתח - נשתמש בטקסט חלופי שיגרום לשגיאה מבוקרת שנוכל לטפל בה
+const apiKey = process.env.GEMINI_API_KEY || "MISSING_KEY";
+const genAI = new GoogleGenerativeAI(apiKey);
 const rooms = {};
 
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
+    
+    // הגנה ראשונית: אם אין מפתח API, ישר ניתן 5 נקודות כדי לא לתקוע את המשתמש
+    if (apiKey === "MISSING_KEY") {
+        return res.json({ points: 5, reason: "תקלת חיבור (חסר מפתח) - אושר חלקית" });
+    }
+
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
@@ -47,19 +55,22 @@ app.post('/api/ask-judge', async (req, res) => {
             isResolved = true; return r;
         }).catch(e => {
             isResolved = true; 
-            console.error("Gemini API Error:", e.message); // הדפסת השגיאה בשרת
-            return { error: true, details: e.message }; // העברת השגיאה ללקוח
+            console.error("Gemini API Error:", e.message); 
+            return { error: true, details: e.message }; 
         });
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout) return res.json({ points: -1, reason: "תקלה: השרת של גוגל לא ענה בזמן" });
-        if (response.error) return res.json({ points: -1, reason: `שגיאת מערכת: ${response.details}` }); // כעת נראה את השגיאה האמיתית!
+        // אם גוגל מחזיר שגיאה (כמו מפתח לא תקין) או מתעכב - נעניק 5 נקודות ולא נשגע את השחקן
+        if (response.timeout || response.error) {
+            return res.json({ points: 5, reason: "תקלת חיבור מול גוגל - אושר חלקית" });
+        }
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        res.json({ points: -1, reason: "תקלה כללית בשרת הערעורים" });
+        // קריסה מוחלטת תזכה ב-5 נקודות
+        res.json({ points: 5, reason: "תקלת שרת - אושר מחמת הספק" });
     }
 });
 
@@ -78,7 +89,7 @@ function calculateAndSendResults(roomId) {
                 score -= (penalties * 5);
             }
         }
-        p.finalScore = Math.max(0, score);
+        p.finalScore = Number(Math.max(0, score).toFixed(2));
     });
 
     room.players.sort((a, b) => {
