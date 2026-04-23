@@ -24,11 +24,11 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts wi
 const rooms = {};
 
 // ==========================================
-// "נשק יום הדין": פונקציה שמדברת ישירות עם שרתי גוגל ללא תוכנת ביניים!
+// פנייה ישירה למודל הפלאש 1.5 - גרסת 8B היציבה
 // ==========================================
 async function askGeminiDirectly(promptText) {
-    // פנייה ישירה למודל הפלאש 1.5 העדכני ביותר בגרסת הבטא
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // השתמשנו במודל gemini-1.5-flash-8b שהוא מהיר, יציב ופתוח לגרסה החינמית
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
