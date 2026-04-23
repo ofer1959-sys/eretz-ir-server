@@ -24,11 +24,11 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts wi
 const rooms = {};
 
 // ==========================================
-// פנייה ישירה למודל הפלאש 1.5 - גרסת 8B היציבה
+// פנייה ישירה למודל הפלאש 1.5 היציב והרשמי
 // ==========================================
 async function askGeminiDirectly(promptText) {
-    // השתמשנו במודל gemini-1.5-flash-8b שהוא מהיר, יציב ופתוח לגרסה החינמית
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
+    // התיקון: חזרה לשם המודל הרשמי והיציב ביותר בגרסת v1beta
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -89,7 +89,7 @@ app.post('/api/ask-judge', async (req, res) => {
            - אם המילה שגויה לחלוטין לקטגוריה - החזר points: 0.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
-        {"points": 10/5/0, "reason": "הסבר קצר"}`;
+        {"points": 10, "reason": "הסבר קצר"}`;
         
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
