@@ -16,17 +16,40 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ניסיון להתחבר לגוגל, אם אין מפתח - נשתמש בטקסט חלופי שיגרום לשגיאה מבוקרת שנוכל לטפל בה
+// קריאת המפתח מתוך Render
 const apiKey = process.env.GEMINI_API_KEY || "MISSING_KEY";
+
+// הדפסה ללוג של השרת כדי שנוכל לראות ב-Render אם המפתח בכלל קיים
+console.log("=== SERVER STARTUP ===");
+console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts with " + apiKey.substring(0, 4) + "...)");
+
 const genAI = new GoogleGenerativeAI(apiKey);
 const rooms = {};
+
+// ==========================================
+// כלי עזר מיוחד לסבא עופר לבדיקת השרת!
+// ==========================================
+app.get('/api/test-gemini', async (req, res) => {
+    if (apiKey === "MISSING_KEY") {
+        return res.json({ status: "Error", message: "API Key is missing in Render environment variables." });
+    }
+    
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const result = await model.generateContent("השב במילה אחת בלבד: האם אתה מחובר?");
+        const text = result.response.text().trim();
+        res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text });
+    } catch (e) {
+        res.json({ status: "Error", api_key_start: apiKey.substring(0, 4), message: e.message });
+    }
+});
+// ==========================================
 
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     
-    // הגנה ראשונית: אם אין מפתח API, ישר ניתן 5 נקודות כדי לא לתקוע את המשתמש
     if (apiKey === "MISSING_KEY") {
-        return res.json({ points: 5, reason: "תקלת חיבור (חסר מפתח) - אושר חלקית" });
+        return res.json({ points: 5, reason: "אין מפתח API בשרת" });
     }
 
     try {
@@ -40,8 +63,8 @@ app.post('/api/ask-judge', async (req, res) => {
         3. שמות ויישובים: אשר יישובים קטנים בישראל, מקצועות ומילים לגיטימיות גם אם הן נדירות.
         4. הערכת ניקוד: 
            - אם המילה נכונה ותקנית לקטגוריה - החזר points: 10.
-           - אם המילה היא סלנג או שיש בה טעות כתיב צורמת - החזר points: 5.
-           - אם המילה שגויה לחלוטין (למשל אילת כעיר בירה) - החזר points: 0.
+           - אם המילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
+           - אם המילה שגויה לחלוטין לקטגוריה - החזר points: 0.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
         {"points": 10/5/0, "reason": "הסבר קצר"}`;
@@ -61,16 +84,16 @@ app.post('/api/ask-judge', async (req, res) => {
         
         const response = await Promise.race([result, timeout]);
         
-        // אם גוגל מחזיר שגיאה (כמו מפתח לא תקין) או מתעכב - נעניק 5 נקודות ולא נשגע את השחקן
-        if (response.timeout || response.error) {
-            return res.json({ points: 5, reason: "תקלת חיבור מול גוגל - אושר חלקית" });
+        if (response.timeout) return res.json({ points: 5, reason: "עומס ברשת (אושר חלקית)" });
+        if (response.error) {
+            // החזרת השגיאה המדויקת באנגלית כדי שנבין מה הבעיה!
+            return res.json({ points: 5, reason: `API Error: ${response.details.substring(0,25)}...` });
         }
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        // קריסה מוחלטת תזכה ב-5 נקודות
-        res.json({ points: 5, reason: "תקלת שרת - אושר מחמת הספק" });
+        res.json({ points: 5, reason: "תקלת שרת (אושר חלקית)" });
     }
 });
 
