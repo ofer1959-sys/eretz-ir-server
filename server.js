@@ -19,25 +19,24 @@ app.use(express.static(path.join(__dirname, 'public')));
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
 
-// שופט הערעורים שלנו
 app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
+        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
         
         כללי הערעור:
-        1. האות הראשונה: המילה התקנית חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
-        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מאותיות א/י/ו/ה עודפות או חסרות, או שגיאת כתיב קלה של אות אחת.
-        3. שמות ויישובים: אשר יישובים קטנים בישראל (כמו "פדואל") גם אם אינם מוכרים לכל.
+        1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
+        2. רווחים וכתיב: התעלם מרווחים ("פופ קורן" = "פופקורן"), התעלם מ-א/י/ו/ה עודפות או חסרות, או שגיאת כתיב קלה.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל, ומילים לגיטימיות גם אם הן נדירות (למשל 'טליה' כאיבר גוף, או 'טוניס' כבירה).
         4. הערכת ניקוד: 
-           - אם המילה נכונה ב-100% לקטגוריה - החזר points: 10.
-           - אם המילה היא סלנג מאוד לא מקובל, או קרובה אך לא מדויקת - החזר points: 5.
-           - אם המילה שגויה לחלוטין (למשל אילת כעיר בירה) - החזר points: 0.
+           - מילה נכונה ותקנית לקטגוריה - החזר points: 10.
+           - מילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
+           - מילה שגויה לחלוטין לקטגוריה - החזר points: 0.
 
         החזר אך ורק JSON תקין במבנה הבא:
-        {"points": 10/5/0, "reason": "הסבר קצר של 2-3 מילים"}`;
+        {"points": 10/5/0, "reason": "הסבר קצר"} // אם אישרת 10 נקודות, ה-reason יכול להיות ריק.`;
         
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
@@ -52,7 +51,7 @@ app.post('/api/ask-judge', async (req, res) => {
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout || response.error) return res.json({ points: -1, reason: "עומס בשרת הערעורים" });
+        if (response.timeout || response.error) return res.json({ points: -1, reason: "תקלת תקשורת" });
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
@@ -141,7 +140,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. נאלץ להתחיל משחק חדש.');
+        if (!room) return socket.emit('gameError', 'השרת אבד. נאלץ להתחיל משחק חדש.');
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
@@ -163,7 +162,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // קבלת ערעור משחקן
     socket.on('submitAppeal', ({ roomId, playerName, newTotalScore, answers }) => {
         const room = rooms[roomId];
         if (!room) return;
@@ -171,7 +169,6 @@ io.on('connection', (socket) => {
         if (player) {
             player.baseScore = newTotalScore;
             player.answers = answers;
-            // מכריזים מחדש על התוצאות לכולם
             calculateAndSendResults(roomId);
         }
     });
