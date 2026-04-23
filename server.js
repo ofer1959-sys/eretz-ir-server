@@ -15,7 +15,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// קריאת המפתח מתוך Render וניקוי רווחים
 const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
 
 console.log("=== SERVER STARTUP ===");
@@ -23,9 +22,9 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
 
 const rooms = {};
 
-// פנייה ישירה למודל הפלאש 1.5 הרשמי
+// פנייה ישירה למודל החדש (gemini-2.5-flash) שזמין בחשבונך
 async function askGeminiDirectly(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -59,12 +58,11 @@ app.get('/api/test-gemini', async (req, res) => {
 });
 
 // ==========================================
-// שופט ה-AI החדש - בודק את כל התשובות במכה אחת!
+// שופט ה-AI למערך מילים (Batch)
 // ==========================================
 app.post('/api/ask-judge-batch', async (req, res) => {
     const { letter, items } = req.body;
     
-    // במידה ואין מפתח, נעניק אוטומטית 5 נקודות לכל מה שנפסל מחמת הספק
     if (apiKey === "MISSING_KEY") {
         let results = {};
         items.forEach(i => { results[i.catId] = { points: 5, reason: "אין מפתח API בשרת" }; });
@@ -77,28 +75,28 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         
         כללי הערעור:
         1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
-        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות, או משגיאת כתיב קלה.
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות.
         3. שמות ויישובים: אשר יישובים קטנים בישראל, מקצועות ומילים לגיטימיות גם אם הן נדירות או צורת זכר/נקבה.
         4. הערכת ניקוד: 
            - 10 נקודות לתשובה מדויקת ותקנית.
-           - 5 נקודות לתשובה קרובה, סלנג, או טעות כתיב צורמת.
+           - 5 נקודות לתשובה קרובה, סלנג, או טעות כתיב צורמת של אות אחת.
            - 0 נקודות לתשובה שגויה לחלוטין.
 
         התשובות לבדיקה:
         ${items.map(i => `- מזהה: "${i.catId}", קטגוריה: "${i.categoryLabel}", תשובה של השחקן: "${i.answer}"`).join('\n')}
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא פתיח) במבנה הבא:
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
         {
           "results": {
-            "catId_1": {"points": 10, "reason": "הסבר"},
-            "catId_2": {"points": 0, "reason": "הסבר"}
+            "catId_1": {"points": 10, "reason": "הסבר קצר"},
+            "catId_2": {"points": 0, "reason": "הסבר קצר"}
           }
         }`;
         
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
-        }, 12000)); // הארכתי מעט כי הוא בודק כמה מילים יחד
+        }, 12000));
         
         const result = askGeminiDirectly(prompt).then(text => {
             isResolved = true; 
