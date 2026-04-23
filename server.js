@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
@@ -16,48 +15,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
-
-// שופט ג'מיני - קפדן ופוסל במקרה של ספק או שגיאה
-app.post('/api/ask-judge', async (req, res) => {
-    const { category, letter, answer } = req.body;
-    try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט אכזר, נוקשה וחסר רחמים במשחק "ארץ עיר" בעברית.
-        הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה של השחקן: "${answer}".
-        עליך לשפוט לפי כללי הברזל הבאים. כל חריגה גוררת פסילה מיידית:
-        1. שיוך מדויק (קריטי!): המילה חייבת להיות בדיוק מה שהקטגוריה דורשת. אם הקטגוריה היא "איבר גוף", "מצקת" זו פסילה. אם זה "עיר בירה", "אילת" זו פסילה כי היא עיר רגילה. אם זה לא מתאים ב-100% - פסול!
-        2. האות הראשונה: התשובה חייבת להתחיל באות "${letter}". שגיאה באות הראשונה = פסול.
-        3. אין המצאות וביטויים: פסול מילים מומצאות או משפטים כמו "מה אתה אומר".
-        4. שגיאות כתיב קלות: מותר לאשר שגיאת כתיב קלה של אות אחת בלבד (רק באמצע או בסוף) או חוסר/עודף של א/י, רק אם ברור למה התכוון השחקן.
-
-        החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
-        {"isValid": true/false, "reason": "הסבר קצר של 2-4 מילים"}`;
-        
-        let isResolved = false;
-        const timeout = new Promise((resolve) => setTimeout(() => {
-            if (!isResolved) resolve({ timeout: true });
-        }, 5500));
-        
-        const result = model.generateContent(prompt).then(r => {
-            isResolved = true; return r;
-        }).catch(e => {
-            isResolved = true; return { error: true };
-        });
-        
-        const response = await Promise.race([result, timeout]);
-        
-        // כאן שינינו: במקרה של עומס או שגיאה - פוסלים!
-        if (response.timeout) return res.json({ isValid: false, reason: "נפסל (השופט לא ענה)" });
-        if (response.error) return res.json({ isValid: false, reason: "נפסל (שגיאת תקשורת)" });
-
-        let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(text));
-    } catch (e) {
-        res.json({ isValid: false, reason: "נפסל (תקלת מערכת)" });
-    }
-});
 
 function calculateAndSendResults(roomId) {
     const room = rooms[roomId];
@@ -65,7 +23,7 @@ function calculateAndSendResults(roomId) {
     
     const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
     room.players.forEach(p => {
-        let score = p.correctCount * 10;
+        let score = p.baseScore || 0; // הניקוד מגיע כעת ישירות מחישוב הלקוח (10 או 5)
         if (minTime > 0 && minTime !== Infinity && p.time < 999) {
             const excessRatio = (p.time - minTime) / minTime;
             if (excessRatio > 0.50) {
@@ -130,13 +88,13 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('playerAnnouncedFinish', playerName);
     });
 
-    socket.on('submitScore', ({ roomId, correctCount, timeInSeconds, answers }) => {
+    socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. נאלץ להתחיל משחק חדש.');
+        if (!room) return socket.emit('gameError', 'השרת התאפס. נאלץ להתחיל מחדש.');
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
-            player.correctCount = correctCount;
+            player.baseScore = totalScore;
             player.time = timeInSeconds;
             player.answers = answers;
             player.hasSubmitted = true;
@@ -160,7 +118,7 @@ io.on('connection', (socket) => {
         const host = room.players.find(p => p.id === socket.id);
         if (host && host.isHost) {
             if (!host.hasSubmitted && data.forceHostSubmit) {
-                host.correctCount = data.myCorrectCount || 0;
+                host.baseScore = data.myTotalScore || 0;
                 host.time = data.myTime || 999;
                 host.answers = data.myAnswers || {};
                 host.hasSubmitted = true;
@@ -169,7 +127,7 @@ io.on('connection', (socket) => {
             room.players.forEach(p => {
                 if (!p.hasSubmitted) {
                     p.hasSubmitted = true;
-                    p.correctCount = 0; p.time = 999; p.answers = {};
+                    p.baseScore = 0; p.time = 999; p.answers = {};
                     room.submittedCount++;
                 }
             });
@@ -184,7 +142,7 @@ io.on('connection', (socket) => {
             room.submittedCount = 0;
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
-            room.players.forEach(p => { p.hasSubmitted = false; p.correctCount = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
+            room.players.forEach(p => { p.hasSubmitted = false; p.baseScore = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
             io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players });
         }
     });
@@ -201,7 +159,7 @@ io.on('connection', (socket) => {
                     setTimeout(() => {
                         if (rooms[roomId] && rooms[roomId].players[playerIndex] && !rooms[roomId].players[playerIndex].hasSubmitted) {
                             rooms[roomId].players[playerIndex].hasSubmitted = true;
-                            rooms[roomId].players[playerIndex].correctCount = 0;
+                            rooms[roomId].players[playerIndex].baseScore = 0;
                             rooms[roomId].players[playerIndex].time = 999; 
                             rooms[roomId].players[playerIndex].answers = {};
                             rooms[roomId].submittedCount++;
