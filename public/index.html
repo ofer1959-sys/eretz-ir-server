@@ -8,10 +8,10 @@
     <style>
         :root { --primary: #4a90e2; --secondary: #f5a623; --success: #7ed321; --danger: #d0021b; --bg: #f0f4f8; --text: #333; }
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; direction: rtl;}
-        .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; margin: 20px 0;}
+        .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; margin: 20px 0; display: flex; flex-direction: column;}
         h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 0.5rem; }
-        .version-badge { font-size: 0.5em; color: white; background-color: var(--primary); padding: 5px 10px; border-radius: 20px; vertical-align: middle;}
-        .screen { display: none; } .active { display: block; }
+        .version-badge { font-size: 0.5em; color: white; background-color: var(--success); padding: 5px 10px; border-radius: 20px; vertical-align: middle;}
+        .screen { display: none; flex-direction: column; } .active { display: flex; }
         input[type="text"] { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box; }
         button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; width: 100%; margin-top: 10px; }
         .btn-primary { background: var(--primary); color: white; }
@@ -32,10 +32,10 @@
         .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
         .gold-medal { font-size: 1.5rem; }
         
-        .comparison-table { min-width: 600px; font-size: 0.9rem; }
+        .comparison-table { min-width: 100%; font-size: 0.9rem; }
         .comparison-table th { background-color: #34495e; }
         .comparison-table th.my-col { background-color: var(--secondary); }
-        .comparison-table td { vertical-align: top; border: 1px solid #eee;}
+        .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
@@ -48,8 +48,8 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה 8 (ללא AI)</span></h1>
-        <p>הכניסו שם ונתחיל!</p>
+        <h1 id="welcome-h1">ארץ עיר <span class="version-badge">גרסה אחרונה ומנצחת</span></h1>
+        <p id="welcome-desc">הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
         <div id="solo-buttons">
@@ -64,6 +64,18 @@
         </div>
     </div>
 
+    <div id="manager-settings-screen" class="screen">
+        <h2 style="color: var(--primary);">הגדרות מנהל משחק</h2>
+        <p>בחר אילו שדות ברצונך <b>לבטל</b> (שלא ישתתפו במשחק):</p>
+        <div style="text-align: right; display: inline-block; font-size: 1.2rem; background: #f9f9f9; padding: 20px; border-radius: 10px; border: 1px solid #ddd; margin: 0 auto;">
+            <label style="display:block; margin-bottom: 10px;"><input type="checkbox" id="disable-capitals" value="capitals" style="transform: scale(1.5); margin-left: 10px;"> עיר בירה</label>
+            <label style="display:block; margin-bottom: 10px;"><input type="checkbox" id="disable-body_parts" value="body_parts" style="transform: scale(1.5); margin-left: 10px;"> איבר גוף</label>
+            <label style="display:block; margin-bottom: 10px;"><input type="checkbox" id="disable-foods" value="foods" style="transform: scale(1.5); margin-left: 10px;"> מאכל</label>
+            <label style="display:block; margin-bottom: 10px;"><input type="checkbox" id="disable-professions" value="professions" style="transform: scale(1.5); margin-left: 10px;"> מקצוע</label>
+        </div>
+        <button class="btn-success" onclick="saveManagerSettings()" style="margin-top: 30px;">אישור וחזרה ללובי</button>
+    </div>
+
     <div id="lobby" class="screen">
         <h2>חדר המתנה קבוצתי</h2>
         <p>קוד החדר שלכם: <strong id="display-room-code" style="font-size:2rem; color:var(--secondary);"></strong></p>
@@ -73,8 +85,9 @@
         <ul id="players-list"></ul>
         
         <div id="host-controls" style="display:none; margin-top: 20px;">
-            <p style="color:#666; font-size:0.9rem;">כשכל השחקנים מחוברים ומופיעים ברשימה, לחץ כאן:</p>
-            <button class="btn-primary" onclick="startGameForAll()">התחל משחק לכולם!</button>
+            <p style="color:#666; font-size:0.9rem;">כשכל השחקנים מחוברים ומופיעים ברשימה, לחצו על התחל:</p>
+            <button class="btn-secondary" onclick="openManagerSettings()" style="margin-bottom: 10px;">⚙️ הגדרות מנהל משחק (ביטול שדות)</button>
+            <button class="btn-primary" onclick="startGameForAll()" id="btn-start-game-all">התחל משחק לכולם!</button>
         </div>
         <p id="waiting-msg" style="display:none; color: var(--primary); font-weight: bold; margin-top: 20px;">ממתין שמנהל החדר יתחיל את המשחק...</p>
     </div>
@@ -116,7 +129,7 @@
             <tbody id="leaderboard-body"></tbody>
         </table>
 
-        <div id="answers-comparison-container"></div>
+        <div id="answers-comparison-container" style="margin-top: 20px;"></div>
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
@@ -126,7 +139,7 @@
 </div>
 
 <script>
-    // 10 המאגרים המלאים שלנו 
+    // 10 המאגרים המלאים והסופיים 
     const RAW_DATA = {
         capitals: `אבו דאבי,אבוג'ה,אקרה,אדיס אבבה,עדן,אלג'יר,עמאן,אמסטרדם,אנדורה לה ולה,אנקרה,אנטננריבו,אפיה,אשגבאט,אסמרה,אסטנה,אסונסיון,אתונה,בגדאד,באקו,במקו,בנדר סרי בגוואן,בנגקוק,בנגי,בנג'ול,בסטרה,בייג'ינג,ביירות,בלגרד,בלמופן,ברלין,ברן,בישקק,ביסאו,בלומפונטיין,בוגוטה,ברזיליה,ברטיסלאבה,ברזוויל,ברידג'טאון,בריסל,בוקרשט,בודפשט,בואנוס איירס,בוג'ומבורה,קהיר,קנברה,קייפטאון,קראקס,קסטריז,קישינב,קולומבו,קונאקרי,קופנהגן,קוטונו,דקר,דמשק,דאר א-סלאם,דאקה,דילי,ג'יבוטי,דודומה,דוחה,דבלין,דושנבה,פריטאון,פונפוטי,גאבורון,ג'ורג'טאון,גיטגה,גואטמלה סיטי,האנוי,הארארה,הוואנה,הלסינקי,הוניארה,אסלאמאבאד,ג'קרטה,ירושלים,ג'ובה,קאבול,קמפלה,קטמנדו,חרטום,קיגאלי,קינגסטון,קינגסטאון,קינשאסה,קואלה לומפור,כווית סיטי,קייב,לה פאס,ליברוויל,לילונגווה,לימה,ליסבון,לובליאנה,לובמבה,לומה,לונדון,לואנדה,לוסקה,לוקסמבורג,מדריד,מג'ורו,מלאבו,מאלה,מנגואה,מנאמה,מנילה,מפוטו,מסרו,מבבנה,מקסיקו סיטי,מינסק,מוגדישו,מונקו,מונרוביה,מונטווידאו,מורוני,מוסקבה,מוסקט,נג'מנה,ניירובי,נסאו,נייפידאו,ניו דלהי,נגרולמוד,ניאמיי,ניקוסיה,נואקשוט,נוקואלופה,אוסלו,אוטווה,ואגאדוגו,פליקיר,פנמה סיטי,פרמריבו,פריז,פנום פן,פודגוריצה,פורט לואי,פורט מורסבי,פורט אוף ספיין,פורט וילה,פורט-או-פרנס,פורטו-נובו,פראג,פראיה,פרטוריה,פוטרג'איה,פיונגיאנג,קיטו,רבאט,רייקיאוויק,ריגה,ריאד,רומא,רוזו,סנט ג'ורג'ס,סנט ג'ונס,סן חוסה,סן מרינו,סן סלוודור,צנעא,סנטיאגו,סנטו דומינגו,סרייבו,סיאול,סינגפור,סקופיה,סופיה,דרום טאראווה,סרי ג'איאווארדנפורה קוטה,סטוקהולם,סוקרה,סובה,סאו טומה,טאיפיי,טאלין,טשקנט,טביליסי,טגוסיגלפה,טהרן,האג,ת'ימפו,טירנה,טוקיו,טריפולי,תוניס,אולן בטור,ואדוץ,ולטה,קריית הוותיקן,ויקטוריה,וינה,ויינטיאן,וילנה,ורשה,וושינגטון די. סי.,ולינגטון,וינדהוק,יאמוסוקרו,יאונדה,יארן,ירוואן,זאגרב`,
         countries: `אפגניסטן,אלבניה,אלג'יריה,אנדורה,אנגולה,אנטיגואה וברבודה,ארגנטינה,ארמניה,אוסטרליה,אוסטריה,אזרבייג'ן,איי בהאמה,בחריין,בנגלדש,ברבדוס,בלארוס,בלגיה,בליז,בנין,בהוטן,בוליביה,בוסניה והרצגובינה,בוצוואנה,ברזיל,ברוניי,בולגריה,בורקינה פאסו,בורונדי,כף ורדה,קמבודיה,קמרון,קנדה,הרפובליקה המרכז-אפריקאית,צ'אד,צ'ילה,סין,קולומביה,קומורו,הרפובליקה הדמוקרטית של קונגו,הרפובליקה של קונגו,קוסטה ריקה,חוף השנהב,קרואטיה,קובה,קפריסין,צ'כיה,דנמרק,ג'יבוטי,דומיניקה,הרפובליקה הדומיניקנית,אקוודור,מצרים,אל סלוודור,גינאה המשוונית,אריתריאה,אסטוניה,אסוואטיני,אתיופיה,פיג'י,פינלנד,צרפת,גבון,גמביה,גאורגיה,גרמניה,גאנה,יוון,גרנדה,גואטמלה,גינאה,גינאה-ביסאו,גיאנה,האיטי,הונדורס,הונגריה,איסלנד,הודו,אינדונזיה,איראן,עיראק,אירלנד,ישראל,איטליה,ג'מייקה,יפן,ירדן,קזחסטן,קניה,קיריבטי,קוריאה הצפונית,קוריאה הדרומית,כווית,קירגיזסטן,לאוס,לטביה,לבנון,לסוטו,ליבריה,לוב,ליכטנשטיין,ליטא,לוקסמבורג,מדגסקר,מלאווי,מלזיה,האיים המלדיביים,מאלי,מלטה,איי מרשל,מאוריטניה,מאוריציוס,מקסיקו,מיקרונזיה,מולדובה,מונקו,מונגוליה,מונטנגרו,מרוקו,מוזמביק,מיאנמר,נמיביה,נאורו,נפאל,הולנד,ניו זילנד,ניקרגואה,ניז'ר,ניגריה,מקדוניה הצפונית,נורווגיה,עומאן,פקיסטן,פלאו,פנמה,פפואה גינאה החדשה,פרגוואי,פרו,הפיליפינים,פולין,פורטוגל,קטר,רומניה,רוסיה,רואנדה,סנט קיטס ונוויס,סנט לוסיה,סנט וינסנט והגרנדינים,סמואה,סן מרינו,סאו טומה ופרינסיפה,ערב הסעודית,סנגל,סרביה,סיישל,סיירה לאון,סינגפור,סלובקיה,סלובניה,איי שלמה,סומליה,דרום אפריקה,דרום סודן,ספרד,סרי לנקה,סודן,סורינאם,שוודיה,שווייץ,סוריה,טג'יקיסטן,טנזניה,תאילנד,טימור-לסטה,טוגו,טונגה,טרינידד וטובגו,תוניסיה,טורקיה,טורקמניסטן,טובאלו,אוגנדה,אוקראינה,איחוד האמירויות הערביות,הממלכה המאוחדת,ארצות הברית,אורוגוואי,אוזבקיסטן,ונואטו,ונצואלה,וייטנאם,תימן,זמביה,זימבבואה,הכס הקדוש,ותיקן,אנגליה,סקוטלנד,בריטניה,אזרביג'אן,בוטסואנה,בוטצואנה,קמא,קונגו,סלוודור,סלבדור,גיאורגיה,גאנה,צפון קוריאה,דרום קוריאה,מינמר,צפון אירלנד,נורבגיה,פקיסטאן,פיליפינים,סישל,איי סיישל,סיישל,דובאי,אבו דאבי,איחוד האמירויות,טורקמניסטאן,תורקמניסטאן,ססירה ליאון,סומלילנד,טוניסיה,ויאטנם,ויאטנאם,זימבבווה,שבדיה`,
@@ -140,19 +153,17 @@
         girls: `אביגיל,אביטל,אדל,אור,אורה,אורית,אורלי,איילה,אילנה,אלונה,אסתר,אפרת,אריאלה,בלה,ברכה,בתיה,גאולה,גילה,גלית,דבורה,דגנית,דינה,דליה,דנה,דניאלה,דפנה,הגר,הדס,הדסה,הילה,ורד,זהבה,חווה,חוה,חיה,חנה,טליה,טובה,יונה,יוכבד,יעל,יפה,יפהפיה,ירדנה,לאה,לבנה,ליהי,ליטל,מאירה,מיה,מיכל,מיכאלה,מירב,מלכה,מנוחה,מרגלית,מרים,נועה,נורית,נטלי,נילי,נעמי,נעמה,נעה,סיגל,סיוון,סמדר,עדינה,עדנה,עליזה,ענבל,ענת,עופרה,עפרה,פנינה,צביה,ציונה,ציפי,ציפורה,קרן,רחל,רחלי,רייזל,רינה,רבקה,רות,רותי,שושנה,שולי,שולמית,שוש,שירה,שירלי,שלומית,שמרית,שני,שרה,שרון,תמר,תקווה,אביבה,אביה,אבישג,אגם,אודליה,אופירה,אורטל,אוריה,אושרית,אחוה,אחווה,אידה,איילת,אילת,אירה,אירינה,איריס,אלה,אלונה,אליזבט,אליזבת,אלינור,אליס,אלישבע,אלכסנדרה,אמה,אמונה,אמיליה,אמינה,אמירה,אסיה,אסיל,אסנת,אסתר,אפנאן,אפרת,אריאל,אריאלה,בלה,בלומה,בסמה,בר,ברכה,ברוריה,בת,בת אל,בת חן,בת עמי,בת שבע,גאולה,גבי,גבריאלה,גולדה,גולי,גולן,גוני,גורית,גילי,גלית,גני,ג'נט,ג'ני,ג'סיקה,דאיה,דבורה,דבי,דגנית,דונה,דורית,דורית,דורין,דיאנה,דינה,דיקלה,דליה,דלית,דנה,דניאל,דניאלה,דפנה,דקלה,הגר,הדר,הודיה,הדס,הדסה,הילה,הלנה,הני,הניה,הרצליה,ורד,ורדה,ורדיה,ורדית,זהבה,זהבית,זוהר,זיו,זיוה,זיוית,זיסל,זמירה,ז'אנה,חבצלת,חגית,חדוה,חמדה,חן,חנה,חני,חניה,חסידה,חסיה,חפציבה,טובה,טובה,טובי,טל,טלי,טליה,טמירה,טניה,יאירה,יובל,יוכי,יוכבד,יולי,יוליה,יונה,יונית,יסמין,יעלה,יערית,יפה,יפית,יפעת,יקירה,ירדנה,ירקונה,ישראלה,כוכבה,כרמלה,כרמית,לאה,לבנה,לי,ליאורה,ליאת,ליבי,ליזה,ליזט,לילך,לימור,לין,לינוי,ליעד,לירון,מאיה,מאירה,מאשה,מגי,מדלן,מור,מוריאל,מורן,מזל,מיטל,מיכל,מילה,מינה,מירב,מירי,מרב,מרגלית,מרים,מרינה,מרסל,מרתה,נוה,נוי,נויה,נחמה,נטע,ניקול,נירה,נירית,נלי,נעמי,נעמה,נורית,נטשה,נינה,נסיה,נתניה,סאלי,סבינה,סברינה,סגולה,סוזן,סוזי,סופי,סופיה,סורי,סטלה,סיגלית,סיון,סילביה,סלויה,סלין,סמדר,סמירה,סנה,סניה,ספיר,עדה,עדינה,עדי,עופרית,עטרה,עידית,עינב,עינת,עליזה,עלמה,עמליה,ענבר,עפרה,ערבה,פאינה,פולינה,פנינה,פרחה,פרלה,צביה,צדף,צופיה,צילה,צליל,צפנת,צפרה,צרויה,קורין,קלרה,קמה,קמי,קנדרה,קסניה,קרא,קרין,קרלה,קרן,קרן אור,קרסטין,רובי,רוזה,רוזלינד,רוזי,רוזן,רוחמה,רומי,רונה,רוני,רונית,רחל,רייצ'ל,רינה,רינת,ריקי,ריטה,רמית,רננה,רעות,רעיה,רפאלה,רקפת,שגית,שולה,שולמית,שוש,שושנה,שחר,שי,שיינה,שילת,שיר,שירה,שירז,שירלי,שלוה,שלומית,שמחה,שמרית,שני,שקד,שרי,שרית,שרה,תאנה,תהילה,תום,תומר,תות,תחיה,תמי,תמילה,תמר,תמרה,תקוה,תרצה`
     };
 
-    // מנגנון נירמול לחיפוש גמיש במאגרים המקומיים
-    function baseNormalize(word) {
-        if (!word) return "";
-        let w = word.trim().replace(/['"־\-]/g, '');
-        // הופך אותיות סופיות לרגילות כדי למנוע פספוסי הקלדה
-        w = w.replace(/ך/g, 'כ').replace(/ם/g, 'מ').replace(/ן/g, 'נ').replace(/ף/g, 'פ').replace(/ץ/g, 'צ');
-        return w;
-    }
-
+    // נרמול פונטי חכם שמתעלם מטעות ט/ת, ק/כ, ומכפילויות של א/ו/י שלא בהתחלה
     function phoneticNormalize(word) {
         if (!word) return "";
-        let first = word.charAt(0);
-        let rest = word.slice(1);
+        let w = word.trim().replace(/['"־\-]/g, '');
+        // סופיות
+        w = w.replace(/ך/g, 'כ').replace(/ם/g, 'מ').replace(/ן/g, 'נ').replace(/ף/g, 'פ').replace(/ץ/g, 'צ');
+        
+        if (w.length <= 1) return w;
+        
+        let first = w.charAt(0);
+        let rest = w.slice(1);
         
         rest = rest.replace(/י+/g, 'י');
         rest = rest.replace(/ו+/g, 'ו');
@@ -163,7 +174,7 @@
         return first + rest;
     }
 
-    // חישוב המרחק (מספר האותיות השגויות/חסרות) בין שתי מילים
+    // מרחק לוינשטיין 
     function levenshteinDistance(a, b) {
         if(a.length === 0) return b.length; 
         if(b.length === 0) return a.length; 
@@ -182,39 +193,52 @@
         return matrix[b.length][a.length];
     }
 
-    // השופט המקומי והאכזרי החדש
-    function validateWord(userWord, reqLetter, dbArrayStr) {
-        let cleanUser = baseNormalize(userWord);
+    // הכנת מאגר מנורמל בזיכרון שיהיה זמין ללא צורך לחשב כל פעם
+    const NORMALIZED_DATA = {};
+    for (let key in RAW_DATA) {
+        const wordsArray = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
+        NORMALIZED_DATA[key] = wordsArray.map(w => ({
+            original: w,
+            phonetic: phoneticNormalize(w)
+        }));
+    }
+
+    function validateWord(userWord, reqLetter, categoryId) {
+        let cleanUser = userWord.trim().replace(/['"־\-]/g, '');
+        cleanUser = cleanUser.replace(/ך/g, 'כ').replace(/ם/g, 'מ').replace(/ן/g, 'נ').replace(/ף/g, 'פ').replace(/ץ/g, 'צ');
+        
         if (!cleanUser.startsWith(reqLetter)) {
-            return { points: 0, isCorrect: false, feedback: `מתחיל באות לא נכונה` };
+            return { matchType: 'none', isCorrect: false, feedback: `מתחיל באות שגויה` };
         }
         
         let phonUser = phoneticNormalize(cleanUser);
-        let dbArray = dbArrayStr.split(',').map(w => w.trim()).filter(w => w.length > 0);
+        let dbArray = NORMALIZED_DATA[categoryId] || [];
         let bestDist = Infinity;
         
-        for (let dbWord of dbArray) {
-            let cleanDb = baseNormalize(dbWord);
-            
-            // בדיקת התאמה מוחלטת או פונטית
-            let phonDb = phoneticNormalize(cleanDb);
-            if (phonUser === phonDb) {
-                return { points: 10, isCorrect: true, feedback: "" };
+        for (let item of dbArray) {
+            // התאמה פונטית מוחלטת -> 10 נקודות
+            if (phonUser === item.phonetic) {
+                return { matchType: 'exact', isCorrect: true, feedback: "" };
             }
             
-            // חישוב מרחק עריכה רק למילים הרלוונטיות לאות
-            if (phonDb.startsWith(reqLetter) || cleanDb.startsWith(reqLetter)) {
-                let dist = levenshteinDistance(cleanUser, cleanDb);
+            // בודק מרחק עריכה רק אם מתחיל באות הנכונה
+            if (item.phonetic.startsWith(reqLetter) || baseNormalize(item.original).startsWith(reqLetter)) {
+                let dist = levenshteinDistance(cleanUser, baseNormalize(item.original));
                 if (dist < bestDist) bestDist = dist;
             }
         }
         
-        // טעות של אות אחת במילה שאורכה סביר
+        // מרחק 1 במילה ארוכה -> 5 נקודות
         if (bestDist === 1 && cleanUser.length >= 3) {
-            return { points: 5, isCorrect: true, feedback: "תשובה לא מדויקת" };
+            return { matchType: 'partial', isCorrect: true, feedback: "תשובה שאינה מדוייקת" };
         }
         
-        return { points: 0, isCorrect: false, feedback: "לא במאגר" };
+        return { matchType: 'none', isCorrect: false, feedback: "לא במאגר" };
+    }
+
+    function baseNormalize(word) {
+        if (!word) return "";
+        return word.trim().replace(/['"־\-]/g, '').replace(/ך/g, 'כ').replace(/ם/g, 'מ').replace(/ן/g, 'נ').replace(/ף/g, 'פ').replace(/ץ/g, 'צ');
     }
 
     const CATEGORIES = [
@@ -230,6 +254,8 @@
         { id: 'professions', label: 'מקצוע' }
     ];
 
+    let activeCategories = CATEGORIES.slice();
+    let disabledCategoriesList = [];
     let currentLetter = '';
     let startTime;
     let timerInterval;
@@ -241,6 +267,26 @@
     let currentRoom = sessionStorage.getItem('currentRoom') || '';
     let isHost = sessionStorage.getItem('isHost') === 'true';
     let myName = sessionStorage.getItem('myName') || '';
+
+    // מסדרים את ממשק הוואטסאפ בטעינת העמוד
+    window.onload = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('room')) {
+            document.getElementById('room-code').value = urlParams.get('room');
+            const joinSec = document.getElementById('join-section');
+            const soloBtns = document.getElementById('solo-buttons');
+            const welcomeP = document.getElementById('welcome-desc');
+            
+            welcomeP.innerHTML = "<strong>הוזמנת למשחק!</strong> הכנס את שמך והצטרף:";
+            joinSec.style.borderTop = "none";
+            joinSec.style.paddingTop = "0";
+            joinSec.style.marginTop = "15px";
+            document.getElementById('welcome').insertBefore(joinSec, soloBtns);
+        }
+        if (myName) {
+            document.getElementById('player-name').value = myName;
+        }
+    };
 
     function showNotification(msg) {
         const notif = document.createElement('div');
@@ -269,17 +315,6 @@
         }
     }
 
-    window.onload = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('room')) {
-            document.getElementById('room-code').value = urlParams.get('room');
-            document.getElementById('join-section').style.display = 'block';
-        }
-        if (myName) {
-            document.getElementById('player-name').value = myName;
-        }
-    };
-
     socket.on('connect', () => {
         if (currentRoom && myName) {
             socket.emit('joinRoom', { roomId: currentRoom, playerName: myName, isHostClaim: isHost });
@@ -294,10 +329,7 @@
     function createRoom() {
         unlockAudio();
         myName = document.getElementById('player-name').value.trim();
-        if (!myName) {
-            alert("שכחת להזין את השם שלך!");
-            return;
-        }
+        if (!myName) return alert("הכנס שם!");
         isHost = true;
         sessionStorage.setItem('myName', myName);
         sessionStorage.setItem('isHost', 'true');
@@ -308,8 +340,7 @@
         unlockAudio();
         myName = document.getElementById('player-name').value.trim();
         const room = document.getElementById('room-code').value.toUpperCase().trim();
-        if (!myName) return alert("שכחת להזין את השם שלך!");
-        if (!room) return alert("אנא הכנס קוד חדר!");
+        if (!myName || !room) return alert("הכנס שם וקוד חדר!");
         
         currentRoom = room;
         isMultiplayerMode = true;
@@ -334,7 +365,6 @@
     socket.on('roomCreated', (data) => {
         isMultiplayerMode = true;
         currentRoom = data.roomId;
-        currentLetter = data.letter;
         sessionStorage.setItem('currentRoom', currentRoom);
         document.getElementById('display-room-code').innerText = currentRoom;
         document.getElementById('host-controls').style.display = 'block';
@@ -343,15 +373,12 @@
     });
 
     socket.on('roomJoined', (data) => {
-        currentLetter = data.letter;
         currentRoom = data.roomId;
         isHost = data.isHost;
         sessionStorage.setItem('isHost', isHost ? 'true' : 'false');
 
         const activeScreen = document.querySelector('.screen.active');
-        if (activeScreen && (activeScreen.id === 'game-screen' || activeScreen.id === 'waiting-results' || activeScreen.id === 'results')) {
-            return;
-        }
+        if (activeScreen && (activeScreen.id === 'game-screen' || activeScreen.id === 'waiting-results' || activeScreen.id === 'results')) return;
 
         if (isHost) {
             document.getElementById('host-controls').style.display = 'block';
@@ -382,10 +409,24 @@
         });
     }
 
+    function openManagerSettings() {
+        showScreen('manager-settings-screen');
+    }
+
+    function saveManagerSettings() {
+        disabledCategoriesList = [];
+        if(document.getElementById('disable-capitals').checked) disabledCategoriesList.push('capitals');
+        if(document.getElementById('disable-body_parts').checked) disabledCategoriesList.push('body_parts');
+        if(document.getElementById('disable-foods').checked) disabledCategoriesList.push('foods');
+        if(document.getElementById('disable-professions').checked) disabledCategoriesList.push('professions');
+        
+        showScreen('lobby');
+    }
+
     function startGameForAll() {
         unlockAudio();
-        document.querySelector('#host-controls button').disabled = true;
-        socket.emit('startGame', currentRoom);
+        document.getElementById('btn-start-game-all').disabled = true;
+        socket.emit('startGame', { roomId: currentRoom, disabledCategories: disabledCategoriesList });
     }
 
     function startSoloGame() {
@@ -395,8 +436,15 @@
         isMultiplayerMode = false;
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
         currentLetter = letters[Math.floor(Math.random() * letters.length)];
+        activeCategories = CATEGORIES.slice(); // לבד תמיד כל השדות
         startCountdownSequence();
     }
+
+    socket.on('gameStarted', (data) => {
+        currentLetter = data.letter;
+        activeCategories = CATEGORIES.filter(c => !data.disabledCategories.includes(c.id));
+        startCountdownSequence();
+    });
 
     function startCountdownSequence() {
         showScreen('countdown-screen');
@@ -426,7 +474,7 @@
         document.getElementById('host-updates-list').innerHTML = '';
         hasSubmittedCurrentRound = false;
         
-        CATEGORIES.forEach(cat => {
+        activeCategories.forEach(cat => {
             const div = document.createElement('div');
             div.className = 'category-row';
             div.innerHTML = `
@@ -456,7 +504,7 @@
         }
     }
 
-    // הליבה החדשה והבטוחה לבדיקת התוצאות (ללא רשת!)
+    // הפונקציה המהירה לבדיקת התוצאות ללא השרת
     function submitGame() {
         unlockAudio(); 
         clearInterval(timerInterval);
@@ -475,39 +523,39 @@
         const statusText = document.getElementById('checking-status');
         const waitMsg = document.getElementById('wait-for-others-msg'); 
         
-        if (waitMsg) {
-            waitMsg.style.display = isMultiplayerMode ? 'block' : 'none';
-        }
+        if (waitMsg) waitMsg.style.display = isMultiplayerMode ? 'block' : 'none';
 
         if (isMultiplayerMode) {
             socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
         }
 
-        if (statusText) statusText.innerText = "השופט בודק את התשובות...";
+        if (statusText) statusText.innerText = "בודק את התשובות שלך...";
 
-        // האפוד מגן שמונע כל קריסה
+        const pointsPerQuestion = activeCategories.length > 0 ? (100 / activeCategories.length) : 0;
+
         try {
-            CATEGORIES.forEach(cat => {
+            activeCategories.forEach(cat => {
                 const inputEl = document.getElementById('input-' + cat.id);
                 const val = inputEl ? inputEl.value.trim() : "";
 
                 if (val === "---" || val === "") {
                     playerAnswers[cat.label] = { val: "דלג", isCorrect: false, points: 0, feedback: "" };
                 } else {
-                    const validation = validateWord(val, currentLetter, RAW_DATA[cat.id]);
+                    const validation = validateWord(val, currentLetter, cat.id);
+                    const questionPoints = validation.matchType === 'exact' ? pointsPerQuestion : (validation.matchType === 'partial' ? pointsPerQuestion / 2 : 0);
+                    
                     playerAnswers[cat.label] = { 
                         val: val, 
                         isCorrect: validation.isCorrect, 
-                        points: validation.points, 
+                        points: questionPoints, 
                         feedback: validation.feedback 
                     };
-                    totalPoints += validation.points;
+                    totalPoints += questionPoints;
                 }
             });
             
             hasSubmittedCurrentRound = true;
 
-            // השהייה קוסמטית בלבד כדי לתת תחושה של בדיקה ולא לקפוץ מיד
             setTimeout(() => {
                 if (isMultiplayerMode) {
                     if (statusText) statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
@@ -517,13 +565,10 @@
                     const p = { name: myName, score: totalPoints, finalScore: totalPoints, time: lastTimeInSeconds, answers: playerAnswers };
                     showFinalResults([p], p);
                 }
-            }, 800);
+            }, 600);
 
         } catch (err) {
             console.error("שגיאה מקומית בבדיקת המילים:", err);
-            alert("מערכת הניקוד נתקלה בבעיה, אך אנו ממשיכים!");
-            
-            // תוכנית מגירה למקרה של קריסה
             hasSubmittedCurrentRound = true;
             if (isMultiplayerMode) {
                 socket.emit('submitScore', { roomId: currentRoom, totalScore: 0, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
@@ -543,7 +588,7 @@
         const statusText = document.getElementById('checking-status');
         
         if (data.submittedCount >= data.totalPlayers) {
-            if(statusText) statusText.innerText = "כולם סיימו! מעבד תוצאות...";
+            if(statusText) statusText.innerText = "כולם סיימו! מכין טבלה...";
         } else if (hasSubmittedCurrentRound) {
             if(statusText) statusText.innerHTML = `הבדיקה הסתיימה! ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
         }
@@ -561,12 +606,12 @@
     });
 
     function forceEndGame() {
-        if (confirm("לסיים את המשחק לכולם עכשיו? (מי שלא סיים יקבל 0 נקודות)")) {
+        if (confirm("האם אתה בטוח שברצונך לסיים את המשחק עבור כולם עכשיו?")) {
             let myTotalPoints = 0;
             for(let key in playerAnswers){ myTotalPoints += playerAnswers[key].points || 0; }
             socket.emit('forceEndGame', { 
                 roomId: currentRoom, 
-                forceHostSubmit: !hasSubmittedCurrentRound, 
+                forceHostSubmit: true, 
                 myTotalScore: myTotalPoints, 
                 myTime: lastTimeInSeconds, 
                 myAnswers: playerAnswers 
@@ -581,15 +626,14 @@
         showFinalResults(leaderboard, myData);
     });
 
-    // הצגת תאי הטבלה המעודכנים כולל ציונים חלקיים
     function getAnswerCellHtml(ans) {
         if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
         let status = '';
         if (ans.isCorrect) {
-            if (ans.points === 10) {
-                status = '<br><span style="color:green; font-size:0.8em;">✅ 10 נק\'</span>';
+            if (ans.feedback) {
+                status = `<br><span style="color:orange; font-size:0.8em;">✅ ${ans.points} נק' (${ans.feedback})</span>`;
             } else {
-                status = `<br><span style="color:orange; font-size:0.8em;">✅ 5 נק' (${ans.feedback})</span>`;
+                status = `<br><span style="color:green; font-size:0.8em;">✅ ${ans.points} נק'</span>`;
             }
         } else {
             status = `<br><span style="color:red; font-size:0.8em;">❌ 0 נק' (${ans.feedback})</span>`;
@@ -620,7 +664,7 @@
                         utterance.lang = 'he-IL';
                         utterance.rate = 1.0;
                         window.speechSynthesis.speak(utterance);
-                    } catch(e) { console.error(e); }
+                    } catch(e) {}
                 }
             }
 
@@ -669,7 +713,7 @@
                 
                 tableHtml += `</tr></thead><tbody>`;
 
-                CATEGORIES.forEach(cat => {
+                activeCategories.forEach(cat => {
                     tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
                     tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
 
@@ -687,7 +731,6 @@
             window.finalLeaderboard = leaderboard;
         } catch(err) {
             console.error("שגיאה קריטית במסך הסיום:", err);
-            alert("תקלה בהצגת הטבלה הסופית.");
         }
     }
 
@@ -706,7 +749,7 @@
         
         if (isHost) {
             document.getElementById('host-controls').style.display = 'block';
-            document.querySelector('#host-controls button').disabled = false;
+            document.getElementById('btn-start-game-all').disabled = false;
         } else {
             document.getElementById('waiting-msg').style.display = 'block';
         }
