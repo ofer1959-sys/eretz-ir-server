@@ -10,7 +10,7 @@
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; direction: rtl;}
         .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; margin: 20px 0;}
         h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 0.5rem; }
-        .version-badge { font-size: 0.5em; color: white; background-color: var(--success); padding: 5px 10px; border-radius: 20px; vertical-align: middle;}
+        .version-badge { font-size: 0.5em; color: white; background-color: #8e44ad; padding: 5px 10px; border-radius: 20px; vertical-align: middle;}
         .screen { display: none; } .active { display: block; }
         input[type="text"] { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box; }
         button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; width: 100%; margin-top: 10px; }
@@ -32,10 +32,10 @@
         .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
         .gold-medal { font-size: 1.5rem; }
         
-        .comparison-table { min-width: 600px; font-size: 0.9rem; }
+        .comparison-table { min-width: 100%; font-size: 0.9rem; }
         .comparison-table th { background-color: #34495e; }
         .comparison-table th.my-col { background-color: var(--secondary); }
-        .comparison-table td { vertical-align: top; border: 1px solid #eee;}
+        .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
@@ -48,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה 5</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה 6 (חסינה)</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -116,11 +116,6 @@
             <tbody id="leaderboard-body"></tbody>
         </table>
 
-        <div id="single-player-results" style="display:none; margin-top:20px; text-align:right; background:#f9f9f9; padding:15px; border-radius:10px;">
-            <h3 style="margin-top:0;">פירוט התשובות שלך:</h3>
-            <div id="answers-breakdown"></div>
-        </div>
-
         <div id="answers-comparison-container"></div>
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
@@ -131,7 +126,6 @@
 </div>
 
 <script>
-    // הוספתי כאן את כל המאגרים שהיו חסרים!! בנים, בנות, יישובים ומאכלים
     const RAW_DATA = {
         capitals: `אבו דאבי,אבוג'ה,אקרה,אדיס אבבה,עדן,אלג'יר,עמאן,אמסטרדם,אנדורה לה ולה,אנקרה,אנטננריבו,אפיה,אשגבאט,אסמרה,אסטנה,אסונסיון,אתונה,בגדאד,באקו,במקו,בנדר סרי בגוואן,בנגקוק,בנגי,בנג'ול,בסטרה,בייג'ינג,ביירות,בלגרד,בלמופן,ברלין,ברן,בישקק,ביסאו,בלומפונטיין,בוגוטה,ברזיליה,ברטיסלאבה,ברזוויל,ברידג'טאון,בריסל,בוקרשט,בודפשט,בואנוס איירס,בוג'ומבורה,קהיר,קנברה,קייפטאון,קראקס,קסטריז,קישינב,קולומבו,קונאקרי,קופנהגן,קוטונו,דקר,דמשק,דאר א-סלאם,דאקה,דילי,ג'יבוטי,דודומה,דוחה,דבלין,דושנבה,פריטאון,פונפוטי,גאבורון,ג'ורג'טאון,גיטגה,גואטמלה סיטי,האנוי,הארארה,הוואנה,הלסינקי,הוניארה,אסלאמאבאד,ג'קרטה,ירושלים,ג'ובה,קאבול,קמפלה,קטמנדו,חרטום,קיגאלי,קינגסטון,קינגסטאון,קינשאסה,קואלה לומפור,כווית סיטי,קייב,לה פאס,ליברוויל,לילונגווה,לימה,ליסבון,לובליאנה,לובמבה,לומה,לונדון,לואנדה,לוסקה,לוקסמבורג,מדריד,מג'ורו,מלאבו,מאלה,מנגואה,מנאמה,מנילה,מפוטו,מסרו,מבבנה,מקסיקו סיטי,מינסק,מוגדישו,מונקו,מונרוביה,מונטווידאו,מורוני,מוסקבה,מוסקט,נג'מנה,ניירובי,נסאו,נייפידאו,ניו דלהי,נגרולמוד,ניאמיי,ניקוסיה,נואקשוט,נוקואלופה,אוסלו,אוטווה,ואגאדוגו,פליקיר,פנמה סיטי,פרמריבו,פריז,פנום פן,פודגוריצה,פורט לואי,פורט מורסבי,פורט אוף ספיין,פורט וילה,פורט-או-פרנס,פורטו-נובו,פראג,פראיה,פרטוריה,פוטרג'איה,פיונגיאנג,קיטו,רבאט,רייקיאוויק,ריגה,ריאד,רומא,רוזו,סנט ג'ורג'ס,סנט ג'ונס,סן חוסה,סן מרינו,סן סלוודור,צנעא,סנטיאגו,סנטו דומינגו,סרייבו,סיאול,סינגפור,סקופיה,סופיה,דרום טאראווה,סרי ג'איאווארדנפורה קוטה,סטוקהולם,סוקרה,סובה,סאו טומה,טאיפיי,טאלין,טשקנט,טביליסי,טגוסיגלפה,טהרן,האג,ת'ימפו,טירנה,טוקיו,טריפולי,תוניס,אולן בטור,ואדוץ,ולטה,קריית הוותיקן,ויקטוריה,וינה,ויינטיאן,וילנה,ורשה,וושינגטון די. סי.,ולינגטון,וינדהוק,יאמוסוקרו,יאונדה,יארן,ירוואן,זאגרב`,
         countries: `אפגניסטן,אלבניה,אלג'יריה,אנדורה,אנגולה,אנטיגואה וברבודה,ארגנטינה,ארמניה,אוסטרליה,אוסטריה,אזרבייג'ן,איי בהאמה,בחריין,בנגלדש,ברבדוס,בלארוס,בלגיה,בליז,בנין,בהוטן,בוליביה,בוסניה והרצגובינה,בוצוואנה,ברזיל,ברוניי,בולגריה,בורקינה פאסו,בורונדי,כף ורדה,קמבודיה,קמרון,קנדה,הרפובליקה המרכז-אפריקאית,צ'אד,צ'ילה,סין,קולומביה,קומורו,הרפובליקה הדמוקרטית של קונגו,הרפובליקה של קונגו,קוסטה ריקה,חוף השנהב,קרואטיה,קובה,קפריסין,צ'כיה,דנמרק,ג'יבוטי,דומיניקה,הרפובליקה הדומיניקנית,אקוודור,מצרים,אל סלוודור,גינאה המשוונית,אריתריאה,אסטוניה,אסוואטיני,אתיופיה,פיג'י,פינלנד,צרפת,גבון,גמביה,גאורגיה,גרמניה,גאנה,יוון,גרנדה,גואטמלה,גינאה,גינאה-ביסאו,גיאנה,האיטי,הונדורס,הונגריה,איסלנד,הודו,אינדונזיה,איראן,עיראק,אירלנד,ישראל,איטליה,ג'מייקה,יפן,ירדן,קזחסטן,קניה,קיריבטי,קוריאה הצפונית,קוריאה הדרומית,כווית,קירגיזסטן,לאוס,לטביה,לבנון,לסוטו,ליבריה,לוב,ליכטנשטיין,ליטא,לוקסמבורג,מדגסקר,מלאווי,מלזיה,האיים המלדיביים,מאלי,מלטה,איי מרשל,מאוריטניה,מאוריציוס,מקסיקו,מיקרונזיה,מולדובה,מונקו,מונגוליה,מונטנגרו,מרוקו,מוזמביק,מיאנמר,נמיביה,נאורו,נפאל,הולנד,ניו זילנד,ניקרגואה,ניז'ר,ניגריה,מקדוניה הצפונית,נורווגיה,עומאן,פקיסטן,פלאו,פנמה,פפואה גינאה החדשה,פרגוואי,פרו,הפיליפינים,פולין,פורטוגל,קטר,רומניה,רוסיה,רואנדה,סנט קיטס ונוויס,סנט לוסיה,סנט וינסנט והגרנדינים,סמואה,סן מרינו,סאו טומה ופרינסיפה,ערב הסעודית,סנגל,סרביה,סיישל,סיירה לאון,סינגפור,סלובקיה,סלובניה,איי שלמה,סומליה,דרום אפריקה,דרום סודן,ספרד,סרי לנקה,סודן,סורינאם,שוודיה,שווייץ,סוריה,טג'יקיסטן,טנזניה,תאילנד,טימור-לסטה,טוגו,טונגה,טרינידד וטובגו,תוניסיה,טורקיה,טורקמניסטן,טובאלו,אוגנדה,אוקראינה,איחוד האמירויות הערביות,הממלכה המאוחדת,ארצות הברית,אורוגוואי,אוזבקיסטן,ונואטו,ונצואלה,וייטנאם,תימן,זמביה,זימבבואה,הכס הקדוש,ותיקן,אנגליה,סקוטלנד,בריטניה,אזרביג'אן,בוטסואנה,בוטצואנה,קמא,קונגו,סלוודור,סלבדור,גיאורגיה,גאנה,צפון קוריאה,דרום קוריאה,מינמר,צפון אירלנד,נורבגיה,פקיסטאן,פיליפינים,סישל,איי סיישל,סיישל,דובאי,אבו דאבי,איחוד האמירויות,טורקמניסטאן,תורקמניסטאן,ססירה ליאון,סומלילנד,טוניסיה,ויאטנם,ויאטנאם,זימבבווה,שבדיה`,
@@ -425,16 +419,6 @@
         return word.trim().replace(/['"־\-]/g, '').replace(/יי+/g, 'י').replace(/וו+/g, 'ו');
     }
 
-    function isMatch(userWord, categoryId) {
-        const cleanUser = normalizeHebrew(userWord);
-        const dbArray = NORMALIZED_DATA[categoryId] || [];
-        return dbArray.some(cleanDb => {
-            return cleanDb === cleanUser || 
-                   (cleanDb.startsWith(cleanUser) && cleanDb.length - cleanUser.length <= 1) ||
-                   (cleanUser.startsWith(cleanDb) && cleanUser.length - cleanDb.length <= 1);
-        });
-    }
-
     async function checkWordWithServer(catLabel, val) {
         try {
             const fetchPromise = fetch('/api/ask-judge', {
@@ -460,32 +444,38 @@
         }
     }
 
+    // קוד בדיקה חסין לחלוטין (Try-Catch מלא)
     async function submitGame() {
         unlockAudio(); 
         clearInterval(timerInterval);
         
         const submitBtn = document.getElementById('submit-btn');
-        submitBtn.disabled = true;
-        submitBtn.innerText = "מעבד תוצאות...";
+        if(submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerText = "מעבד תוצאות...";
+        }
 
         lastTimeInSeconds = Math.floor((Date.now() - startTime) / 1000);
         lastCorrectCount = 0;
+        playerAnswers = {}; // איפוס התשובות לשמירה נקייה
         
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
         const waitMsg = document.getElementById('wait-for-others-msg'); 
         
         if (waitMsg) {
-            if (isMultiplayerMode) {
-                waitMsg.style.display = 'block';
-                socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
-            } else {
-                waitMsg.style.display = 'none'; 
-            }
+            waitMsg.style.display = isMultiplayerMode ? 'block' : 'none';
         }
 
-        try {
-            for (const cat of CATEGORIES) {
+        if (isMultiplayerMode) {
+            socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
+        }
+
+        if (statusText) statusText.innerText = "התשובות נבדקות כעת...";
+
+        // לולאת בדיקה בטוחה שלעולם לא תקרוס
+        for (const cat of CATEGORIES) {
+            try {
                 const inputEl = document.getElementById('input-' + cat.id);
                 const val = inputEl ? inputEl.value.trim() : "";
                 const normalizedVal = normalizeHebrew(val);
@@ -497,37 +487,43 @@
                 } else if (!normalizedVal.startsWith(currentLetter)) {
                     feedback = `חייב להתחיל באות ${currentLetter}`;
                 } else {
-                    if (isMatch(val, cat.id)) {
+                    // בדיקה מקומית במאגר הענק
+                    const dbArray = NORMALIZED_DATA[cat.id] || [];
+                    const isMatchLocal = dbArray.some(cleanDb => {
+                        return cleanDb === normalizedVal || 
+                               (cleanDb.startsWith(normalizedVal) && cleanDb.length - normalizedVal.length <= 1) ||
+                               (normalizedVal.startsWith(cleanDb) && normalizedVal.length - cleanDb.length <= 1);
+                    });
+
+                    if (isMatchLocal) {
                         isCorrect = true;
                         lastCorrectCount++;
                     } else {
-                        statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
+                        if (statusText) statusText.innerText = `השופט בודק כעת את המילה: ${val}...`;
                         const judgeRes = await checkWordWithServer(cat.label, val);
                         isCorrect = judgeRes.isValid;
                         feedback = judgeRes.reason;
                         if (isCorrect) lastCorrectCount++;
                     }
                 }
-                playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect, feedback };
+                playerAnswers[cat.label] = { val: val === "---" || val === "" ? "דלג" : val, isCorrect: isCorrect, feedback: feedback };
+            } catch (err) {
+                // במקרה של שגיאה במילה ספציפית, פוסלים וממשיכים הלאה
+                playerAnswers[cat.label] = { val: "שגיאה", isCorrect: false, feedback: "נפסל עקב תקלה" };
             }
-            
-            hasSubmittedCurrentRound = true;
+        }
+        
+        hasSubmittedCurrentRound = true;
+        if (statusText) {
             statusText.innerText = isMultiplayerMode ? "הבדיקה הסתיימה! ממתין לשאר השחקנים..." : "מכין את התוצאות שלך...";
+        }
 
-            if (isMultiplayerMode) {
-                socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
-            } else {
-                const p = { name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers };
-                showFinalResults([p], p);
-            }
-        } catch (e) {
-            console.error("שגיאה במערכת:", e);
-            hasSubmittedCurrentRound = true;
-            if (isMultiplayerMode) {
-                socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
-            } else {
-                showFinalResults([{ name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers }], {name: myName, answers: playerAnswers});
-            }
+        // שליחת התוצאות הבטוחות
+        if (isMultiplayerMode) {
+            socket.emit('submitScore', { roomId: currentRoom, correctCount: lastCorrectCount, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
+        } else {
+            const p = { name: myName, score: lastCorrectCount * 10, time: lastTimeInSeconds, answers: playerAnswers, finalScore: lastCorrectCount * 10 };
+            showFinalResults([p], p);
         }
     }
 
@@ -541,15 +537,15 @@
         const statusText = document.getElementById('checking-status');
         
         if (data.submittedCount >= data.totalPlayers) {
-            statusText.innerText = "כולם סיימו! מעבד תוצאות...";
+            if(statusText) statusText.innerText = "כולם סיימו! מעבד תוצאות...";
         } else if (hasSubmittedCurrentRound) {
-            statusText.innerHTML = `הבדיקה הסתיימה! ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
+            if(statusText) statusText.innerHTML = `הבדיקה הסתיימה! ממתין לשחקנים הבאים שיסיימו: <br><b style="color:var(--danger);">${data.waitingFor.join(', ')}</b>`;
         }
         
         if (list) {
             const existingId = "status-" + data.playerName.replace(/\s+/g, '-');
             if (!document.getElementById(existingId)) {
-                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ <strong>${data.playerName}</strong> סיים/ה את הבדיקה</div>`;
+                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ <strong>${data.playerName}</strong> המתין/ה לתוצאות</div>`;
             }
         }
 
@@ -578,82 +574,55 @@
         showFinalResults(leaderboard, myData);
     });
 
-    function getAnswerCellHtml(ans) {
-        if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
-        let status = '';
-        if (ans.isCorrect) {
-            if (ans.feedback) status = '<br><span style="color:green; font-size:0.8em;">🤖 אושר (שופט)</span>';
-            else status = '<br><span style="color:green; font-size:0.8em;">✅ אושר (מאגר)</span>';
-        } else {
-            status = '<br><span style="color:red; font-size:0.8em;">❌ נפסל</span>';
-            if (ans.feedback) status += `<br><span style="font-size:0.75em; color:#666;">${ans.feedback}</span>`;
-        }
-        return `<td style="vertical-align:middle;"><strong>${ans.val}</strong>${status}</td>`;
-    }
-
+    // קוד יצירת הטבלה המאוחדת והבטוחה (לשחקן בודד ולרבים כאחד)
     function showFinalResults(leaderboard, myData) {
-        showScreen('results');
-        if (!leaderboard || leaderboard.length === 0) return;
-        
-        if (!myData) {
-            myData = leaderboard.find(p => p.name === myName);
-            if (!myData) myData = { name: myName, answers: playerAnswers };
-        }
-
-        const winner = leaderboard[0];
-        
-        const winnerText = leaderboard.length > 1 ? `המנצח הוא ${winner.name}! 🏆` : `סיימת את המשחק!`;
-        document.getElementById('winner-announcement').innerText = winnerText;
-        
-        speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "סיימת את המשחק.");
-        setTimeout(() => { speak("יופי, הצלחה נאה בארץ עיר. אפשר לשחק שוב."); }, 2500);
-
-        const tbody = document.getElementById('leaderboard-body');
-        tbody.innerHTML = '';
-        leaderboard.forEach((p, idx) => {
-            let placeIcon = idx + 1;
-            if (idx === 0) placeIcon = "🥇";
-            else if (idx === 1) placeIcon = "🥈";
-            else if (idx === 2) placeIcon = "🥉";
+        try {
+            showScreen('results');
+            if (!leaderboard || leaderboard.length === 0) return;
             
-            tbody.innerHTML += `
-                <tr>
-                    <td class="${idx === 0 ? 'gold-medal' : ''}">${placeIcon}</td>
-                    <td><strong>${p.name}</strong></td>
-                    <td>${p.finalScore !== undefined ? p.finalScore : p.score}</td>
-                    <td style="color:#666;">${p.time === 999 ? 'פרש' : p.time + " שנ'"}</td>
-                </tr>`;
-        });
+            const winner = leaderboard[0];
+            const winnerText = leaderboard.length > 1 ? `המנצח הוא ${winner.name}! 🏆` : `סיימת את המשחק!`;
+            
+            const titleEl = document.getElementById('winner-announcement');
+            if (titleEl) titleEl.innerText = winnerText;
+            
+            speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "סיימת את המשחק.");
+            setTimeout(() => { speak("יופי, הצלחה נאה בארץ עיר. אפשר לשחק שוב."); }, 2500);
 
-        const comparisonContainer = document.getElementById('answers-comparison-container');
-        const singleResults = document.getElementById('single-player-results');
-        
-        if (leaderboard.length === 1) {
-            if(singleResults && myData && myData.answers) {
-                const breakdown = document.getElementById('answers-breakdown');
-                breakdown.innerHTML = '';
-                Object.keys(myData.answers).forEach(cat => {
-                    const ans = myData.answers[cat];
-                    const icon = ans.val === "דלג" ? "⚪" : (ans.isCorrect ? "✅" : "❌");
-                    breakdown.innerHTML += `<div style="margin-bottom: 5px;">${icon} <strong>${cat}:</strong> ${ans.val} <span style="font-size:0.85em; color:#666;">${ans.feedback ? '('+ans.feedback+')' : ''}</span></div>`;
+            const tbody = document.getElementById('leaderboard-body');
+            if (tbody) {
+                tbody.innerHTML = '';
+                leaderboard.forEach((p, idx) => {
+                    let placeIcon = idx + 1;
+                    if (idx === 0) placeIcon = "🥇";
+                    else if (idx === 1) placeIcon = "🥈";
+                    else if (idx === 2) placeIcon = "🥉";
+                    
+                    const finalSc = p.finalScore !== undefined ? p.finalScore : (p.score || 0);
+                    const timeStr = p.time === 999 ? 'פרש' : p.time + " שנ'";
+                    
+                    tbody.innerHTML += `
+                        <tr>
+                            <td class="${idx === 0 ? 'gold-medal' : ''}">${placeIcon}</td>
+                            <td><strong>${p.name}</strong></td>
+                            <td>${finalSc}</td>
+                            <td style="color:#666;">${timeStr}</td>
+                        </tr>`;
                 });
-                singleResults.style.display = 'block';
             }
-            if(comparisonContainer) comparisonContainer.innerHTML = '';
-        } else if (leaderboard.length > 1) {
-            if(singleResults) singleResults.style.display = 'none';
-            if(comparisonContainer && myData && myData.answers) {
+
+            const comparisonContainer = document.getElementById('answers-comparison-container');
+            if (comparisonContainer) {
                 let tableHtml = `
-                    <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05);">
-                        <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">השוואת תשובות:</h3>
+                    <div style="overflow-x: auto; margin-top: 30px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); text-align:center;">
+                        <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">${leaderboard.length > 1 ? 'השוואת התשובות:' : 'פירוט התשובות שלך:'}</h3>
                         <table class="leaderboard-table comparison-table" style="margin-top:0;">
                             <thead>
                                 <tr>
                                     <th>קטגוריה</th>
-                                    <th class="my-col">התשובות שלי</th>`;
+                `;
                 
-                const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
-                otherPlayers.forEach(p => {
+                leaderboard.forEach(p => {
                     tableHtml += `<th>${p.name}</th>`;
                 });
                 
@@ -661,11 +630,20 @@
 
                 CATEGORIES.forEach(cat => {
                     tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
-                    tableHtml += getAnswerCellHtml(myData.answers[cat.label]);
-
-                    otherPlayers.forEach(p => {
-                        const theirAns = p.answers ? p.answers[cat.label] : null;
-                        tableHtml += getAnswerCellHtml(theirAns);
+                    
+                    leaderboard.forEach(p => {
+                        const pAns = (p.answers && p.answers[cat.label]) ? p.answers[cat.label] : { val: "---", isCorrect: false, feedback: "" };
+                        const icon = (pAns.val === "דלג" || pAns.val === "---") ? "⚪" : (pAns.isCorrect ? "✅" : "❌");
+                        let status = '';
+                        if (pAns.val !== "דלג" && pAns.val !== "---") {
+                            if (pAns.isCorrect) {
+                                status = pAns.feedback ? '<br><span style="color:green; font-size:0.8em;">🤖 אושר (שופט)</span>' : '<br><span style="color:green; font-size:0.8em;">✅ אושר (מאגר)</span>';
+                            } else {
+                                status = '<br><span style="color:red; font-size:0.8em;">❌ נפסל</span>';
+                                if (pAns.feedback) status += `<br><span style="font-size:0.75em; color:#666;">(${pAns.feedback})</span>`;
+                            }
+                        }
+                        tableHtml += `<td style="vertical-align:middle;"><strong>${pAns.val}</strong>${status}</td>`;
                     });
 
                     tableHtml += `</tr>`;
@@ -673,9 +651,11 @@
                 tableHtml += `</tbody></table></div>`;
                 comparisonContainer.innerHTML = tableHtml;
             }
+            
+            window.finalLeaderboard = leaderboard;
+        } catch(err) {
+            console.error("שגיאה קריטית במסך הסיום:", err);
         }
-        
-        window.finalLeaderboard = leaderboard;
     }
 
     function playAgainInSameRoom() {
