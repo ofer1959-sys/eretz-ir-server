@@ -16,7 +16,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "MISSING_KEY");
 const rooms = {};
 
 app.post('/api/ask-judge', async (req, res) => {
@@ -28,12 +28,12 @@ app.post('/api/ask-judge', async (req, res) => {
         
         כללי הערעור:
         1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
-        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות.
-        3. שמות ויישובים: אשר יישובים קטנים בישראל, שמות נדירים, ומילים לגיטימיות.
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות, או משגיאת כתיב קלה של אות אחת.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל, מקצועות ומילים לגיטימיות גם אם הן נדירות.
         4. הערכת ניקוד: 
            - אם המילה נכונה ותקנית לקטגוריה - החזר points: 10.
-           - אם המילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
-           - אם המילה שגויה לחלוטין לקטגוריה - החזר points: 0.
+           - אם המילה היא סלנג או שיש בה טעות כתיב צורמת - החזר points: 5.
+           - אם המילה שגויה לחלוטין (למשל אילת כעיר בירה) - החזר points: 0.
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
         {"points": 10/5/0, "reason": "הסבר קצר"}`;
@@ -46,20 +46,20 @@ app.post('/api/ask-judge', async (req, res) => {
         const result = model.generateContent(prompt).then(r => {
             isResolved = true; return r;
         }).catch(e => {
-            isResolved = true; return { error: true };
+            isResolved = true; 
+            console.error("Gemini API Error:", e.message); // הדפסת השגיאה בשרת
+            return { error: true, details: e.message }; // העברת השגיאה ללקוח
         });
         
         const response = await Promise.race([result, timeout]);
         
-        // התיקון הגדול: אם גוגל לא עונה בזמן או חוסם עקב עומס, השחקן מקבל חצי ניקוד מחמת הספק!
-        if (response.timeout || response.error) {
-            return res.json({ points: 5, reason: "אושר מחמת הספק" });
-        }
+        if (response.timeout) return res.json({ points: -1, reason: "תקלה: השרת של גוגל לא ענה בזמן" });
+        if (response.error) return res.json({ points: -1, reason: `שגיאת מערכת: ${response.details}` }); // כעת נראה את השגיאה האמיתית!
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        res.json({ points: 5, reason: "אושר מחמת הספק (תקלה)" });
+        res.json({ points: -1, reason: "תקלה כללית בשרת הערעורים" });
     }
 });
 
@@ -78,8 +78,7 @@ function calculateAndSendResults(roomId) {
                 score -= (penalties * 5);
             }
         }
-        // עיגול ל-2 ספרות עשרוניות גם בשרת
-        p.finalScore = Number(Math.max(0, score).toFixed(2));
+        p.finalScore = Math.max(0, score);
     });
 
     room.players.sort((a, b) => {
