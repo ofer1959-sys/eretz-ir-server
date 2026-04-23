@@ -19,15 +19,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
 
 console.log("=== SERVER STARTUP ===");
-console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts with " + apiKey.substring(0, 4) + "...)");
+console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
 
 const rooms = {};
 
-// ==========================================
-// פנייה ישירה למודל החדש והמעודכן שפתוח בחשבון שלך!
-// ==========================================
+// פנייה ישירה למודל הפלאש 1.5 הרשמי
 async function askGeminiDirectly(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -50,63 +48,57 @@ async function askGeminiDirectly(promptText) {
     }
 }
 
-// ==========================================
-// כלי בילוש 1: בדיקת תקשורת למודל 2.5-flash
-// ==========================================
 app.get('/api/test-gemini', async (req, res) => {
-    if (apiKey === "MISSING_KEY") {
-        return res.json({ status: "Error", message: "API Key is missing." });
-    }
-    
+    if (apiKey === "MISSING_KEY") return res.json({ status: "Error", message: "API Key is missing." });
     try {
         const text = await askGeminiDirectly("השב במילה אחת בלבד: האם אתה מחובר?");
-        res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text.trim() });
+        res.json({ status: "Success", gemini_response: text.trim() });
     } catch (e) {
-        res.json({ status: "Error", api_key_start: apiKey.substring(0, 4), message: e.message });
+        res.json({ status: "Error", message: e.message });
     }
 });
 
 // ==========================================
-// כלי בילוש 2: שואב את רשימת המודלים שפתוחים למפתח שלך
+// שופט ה-AI החדש - בודק את כל התשובות במכה אחת!
 // ==========================================
-app.get('/api/list-models', async (req, res) => {
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const data = await response.json();
-        res.json(data);
-    } catch (e) {
-        res.json({ error: e.message });
-    }
-});
-// ==========================================
-
-app.post('/api/ask-judge', async (req, res) => {
-    const { category, letter, answer } = req.body;
+app.post('/api/ask-judge-batch', async (req, res) => {
+    const { letter, items } = req.body;
     
+    // במידה ואין מפתח, נעניק אוטומטית 5 נקודות לכל מה שנפסל מחמת הספק
     if (apiKey === "MISSING_KEY") {
-        return res.json({ points: 5, reason: "אין מפתח API בשרת" });
+        let results = {};
+        items.forEach(i => { results[i.catId] = { points: 5, reason: "אין מפתח API בשרת" }; });
+        return res.json({ results });
     }
 
     try {
-        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
-        הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
+        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. האות הנדרשת: "${letter}".
+        בדוק את רשימת התשובות הבאות.
         
         כללי הערעור:
         1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
-        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות, או משגיאת כתיב קלה של אות אחת.
-        3. שמות ויישובים: אשר יישובים קטנים בישראל, מקצועות ומילים לגיטימיות גם אם הן נדירות.
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות, או משגיאת כתיב קלה.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל, מקצועות ומילים לגיטימיות גם אם הן נדירות או צורת זכר/נקבה.
         4. הערכת ניקוד: 
-           - אם המילה נכונה ותקנית לקטגוריה - החזר points: 10.
-           - אם המילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
-           - אם המילה שגויה לחלוטין לקטגוריה - החזר points: 0.
+           - 10 נקודות לתשובה מדויקת ותקנית.
+           - 5 נקודות לתשובה קרובה, סלנג, או טעות כתיב צורמת.
+           - 0 נקודות לתשובה שגויה לחלוטין.
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
-        {"points": 10, "reason": "הסבר קצר"}`;
+        התשובות לבדיקה:
+        ${items.map(i => `- מזהה: "${i.catId}", קטגוריה: "${i.categoryLabel}", תשובה של השחקן: "${i.answer}"`).join('\n')}
+
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא פתיח) במבנה הבא:
+        {
+          "results": {
+            "catId_1": {"points": 10, "reason": "הסבר"},
+            "catId_2": {"points": 0, "reason": "הסבר"}
+          }
+        }`;
         
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
-        }, 8500));
+        }, 12000)); // הארכתי מעט כי הוא בודק כמה מילים יחד
         
         const result = askGeminiDirectly(prompt).then(text => {
             isResolved = true; 
@@ -118,13 +110,18 @@ app.post('/api/ask-judge', async (req, res) => {
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout) return res.json({ points: 5, reason: "עומס ברשת (אושר חלקית)" });
-        if (response.error) return res.json({ points: 5, reason: `שגיאת רשת (אושר חלקית)` });
+        if (response.timeout || response.error) {
+            let results = {};
+            items.forEach(i => { results[i.catId] = { points: 5, reason: "עומס רשת (אושר חלקית)" }; });
+            return res.json({ results });
+        }
 
         let cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(cleanText));
     } catch (e) {
-        res.json({ points: 5, reason: "תקלת שרת (אושר חלקית)" });
+        let results = {};
+        items.forEach(i => { results[i.catId] = { points: 5, reason: "תקלת שרת (אושר חלקית)" }; });
+        res.json({ results });
     }
 });
 
@@ -155,22 +152,28 @@ function calculateAndSendResults(roomId) {
 }
 
 io.on('connection', (socket) => {
-    socket.on('createRoom', (hostName) => {
+    socket.on('createRoom', (data) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
         const gameLetter = letters[Math.floor(Math.random() * letters.length)];
         
-        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false };
+        rooms[roomId] = { 
+            players: [], 
+            letter: gameLetter, 
+            submittedCount: 0, 
+            gameStarted: false,
+            disabledCategories: data.disabledCategories || []
+        };
         socket.join(roomId);
-        rooms[roomId].players.push({ id: socket.id, name: hostName, isHost: true, hasSubmitted: false });
-        socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players });
+        rooms[roomId].players.push({ id: socket.id, name: data.hostName, isHost: true, hasSubmitted: false });
+        socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players, disabledCategories: rooms[roomId].disabledCategories });
     });
 
     socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
         let room = rooms[roomId];
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
-            rooms[roomId] = { players: [], letter: letters[Math.floor(Math.random() * letters.length)], submittedCount: 0, gameStarted: false };
+            rooms[roomId] = { players: [], letter: letters[Math.floor(Math.random() * letters.length)], submittedCount: 0, gameStarted: false, disabledCategories: [] };
             room = rooms[roomId];
         }
 
@@ -185,19 +188,17 @@ io.on('connection', (socket) => {
         
         socket.join(roomId);
         const myPlayer = room.players.find(p => p.name === playerName);
-        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost });
+        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost, disabledCategories: room.disabledCategories });
         io.to(roomId).emit('updatePlayers', room.players);
     });
 
     socket.on('startGame', (data) => {
         const roomId = data.roomId;
-        const disabledCategories = data.disabledCategories || [];
-        
         if(rooms[roomId]) {
             rooms[roomId].gameStarted = true;
             io.to(roomId).emit('gameStarted', { 
                 letter: rooms[roomId].letter, 
-                disabledCategories: disabledCategories 
+                disabledCategories: rooms[roomId].disabledCategories 
             });
         }
     });
@@ -241,8 +242,8 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('announceAppeal', ({ roomId }) => {
-        io.to(roomId).emit('appealStarted');
+    socket.on('announceAppeal', ({ roomId, playerName }) => {
+        io.to(roomId).emit('appealStarted', playerName);
     });
 
     socket.on('forceEndGame', (data) => {
@@ -276,7 +277,7 @@ io.on('connection', (socket) => {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
             room.players.forEach(p => { p.hasSubmitted = false; p.baseScore = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
-            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players });
+            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players, disabledCategories: room.disabledCategories });
         }
     });
 
