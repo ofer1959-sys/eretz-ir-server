@@ -28,18 +28,17 @@ app.post('/api/ask-judge', async (req, res) => {
         
         כללי הערעור:
         1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
-        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות, או משגיאת כתיב קלה של אות אחת.
-        3. שמות ויישובים: אשר יישובים קטנים בישראל (כמו "פדואל" או "טל שחר"), מקצועות ("פרש", "טלפנית") ומילים לגיטימיות גם אם הן נדירות.
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל, שמות נדירים, ומילים לגיטימיות.
         4. הערכת ניקוד: 
            - אם המילה נכונה ותקנית לקטגוריה - החזר points: 10.
-           - אם המילה היא סלנג או שיש בה טעות כתיב צורמת מעבר לאות אחת - החזר points: 5.
-           - אם המילה שגויה לחלוטין (למשל אילת כעיר בירה) - החזר points: 0.
+           - אם המילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
+           - אם המילה שגויה לחלוטין לקטגוריה - החזר points: 0.
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא פורמט Markdown) במבנה הבא:
-        {"points": 10/5/0, "reason": "הסבר קצר של 2-4 מילים"}`;
+        החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
+        {"points": 10/5/0, "reason": "הסבר קצר"}`;
         
         let isResolved = false;
-        // הגדלנו את הזמן ל-8.5 שניות כדי למנוע את תקלות התקשורת!
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
         }, 8500));
@@ -52,12 +51,15 @@ app.post('/api/ask-judge', async (req, res) => {
         
         const response = await Promise.race([result, timeout]);
         
-        if (response.timeout || response.error) return res.json({ points: -1, reason: "תקלת תקשורת" });
+        // התיקון הגדול: אם גוגל לא עונה בזמן או חוסם עקב עומס, השחקן מקבל חצי ניקוד מחמת הספק!
+        if (response.timeout || response.error) {
+            return res.json({ points: 5, reason: "אושר מחמת הספק" });
+        }
 
         let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(text));
     } catch (e) {
-        res.json({ points: -1, reason: "תקלה בערעור" });
+        res.json({ points: 5, reason: "אושר מחמת הספק (תקלה)" });
     }
 });
 
@@ -76,7 +78,8 @@ function calculateAndSendResults(roomId) {
                 score -= (penalties * 5);
             }
         }
-        p.finalScore = Math.max(0, score);
+        // עיגול ל-2 ספרות עשרוניות גם בשרת
+        p.finalScore = Number(Math.max(0, score).toFixed(2));
     });
 
     room.players.sort((a, b) => {
