@@ -23,25 +23,26 @@ app.post('/api/ask-judge', async (req, res) => {
     const { category, letter, answer } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית.
+        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
         
         כללי הערעור:
         1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
-        2. רווחים וכתיב: התעלם מרווחים ("פופ קורן" = "פופקורן"), התעלם מ-א/י/ו/ה עודפות או חסרות, או שגיאת כתיב קלה.
-        3. שמות ויישובים: אשר יישובים קטנים בישראל, ומילים לגיטימיות גם אם הן נדירות (למשל 'טליה' כאיבר גוף, או 'טוניס' כבירה).
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות, או משגיאת כתיב קלה של אות אחת.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל (כמו "פדואל" או "טל שחר"), מקצועות ("פרש", "טלפנית") ומילים לגיטימיות גם אם הן נדירות.
         4. הערכת ניקוד: 
-           - מילה נכונה ותקנית לקטגוריה - החזר points: 10.
-           - מילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
-           - מילה שגויה לחלוטין לקטגוריה - החזר points: 0.
+           - אם המילה נכונה ותקנית לקטגוריה - החזר points: 10.
+           - אם המילה היא סלנג או שיש בה טעות כתיב צורמת מעבר לאות אחת - החזר points: 5.
+           - אם המילה שגויה לחלוטין (למשל אילת כעיר בירה) - החזר points: 0.
 
-        החזר אך ורק JSON תקין במבנה הבא:
-        {"points": 10/5/0, "reason": "הסבר קצר"} // אם אישרת 10 נקודות, ה-reason יכול להיות ריק.`;
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא פורמט Markdown) במבנה הבא:
+        {"points": 10/5/0, "reason": "הסבר קצר של 2-4 מילים"}`;
         
         let isResolved = false;
+        // הגדלנו את הזמן ל-8.5 שניות כדי למנוע את תקלות התקשורת!
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
-        }, 5500));
+        }, 8500));
         
         const result = model.generateContent(prompt).then(r => {
             isResolved = true; return r;
@@ -140,7 +141,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('gameError', 'השרת אבד. נאלץ להתחיל משחק חדש.');
+        if (!room) return socket.emit('gameError', 'השרת איבד את החדר. נאלץ להתחיל משחק חדש.');
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
