@@ -32,10 +32,10 @@
         .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
         .gold-medal { font-size: 1.5rem; }
         
-        .comparison-table { min-width: 100%; font-size: 0.9rem; }
+        .comparison-table { min-width: 600px; font-size: 0.9rem; }
         .comparison-table th { background-color: #34495e; }
         .comparison-table th.my-col { background-color: var(--secondary); }
-        .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
+        .comparison-table td { vertical-align: top; border: 1px solid #eee;}
         
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
@@ -48,7 +48,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1>ארץ עיר <span class="version-badge">גרסה 7</span></h1>
+        <h1>ארץ עיר <span class="version-badge">גרסה סופית אמיתית</span></h1>
         <p>הכניסו שם ונתחיל!</p>
         <input type="text" id="player-name" placeholder="השם שלך...">
         
@@ -116,7 +116,7 @@
             <tbody id="leaderboard-body"></tbody>
         </table>
 
-        <div id="answers-comparison-container"></div>
+        <div id="answers-comparison-container" style="overflow-x: auto; margin-top: 30px;"></div>
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
@@ -126,7 +126,7 @@
 </div>
 
 <script>
-    // הנה כל 10 המאגרים המלאים שלנו (כולל בנים, בנות, מאכלים ויישובים)
+    // הגדרת המאגרים
     const RAW_DATA = {
         capitals: `אבו דאבי,אבוג'ה,אקרה,אדיס אבבה,עדן,אלג'יר,עמאן,אמסטרדם,אנדורה לה ולה,אנקרה,אנטננריבו,אפיה,אשגבאט,אסמרה,אסטנה,אסונסיון,אתונה,בגדאד,באקו,במקו,בנדר סרי בגוואן,בנגקוק,בנגי,בנג'ול,בסטרה,בייג'ינג,ביירות,בלגרד,בלמופן,ברלין,ברן,בישקק,ביסאו,בלומפונטיין,בוגוטה,ברזיליה,ברטיסלאבה,ברזוויל,ברידג'טאון,בריסל,בוקרשט,בודפשט,בואנוס איירס,בוג'ומבורה,קהיר,קנברה,קייפטאון,קראקס,קסטריז,קישינב,קולומבו,קונאקרי,קופנהגן,קוטונו,דקר,דמשק,דאר א-סלאם,דאקה,דילי,ג'יבוטי,דודומה,דוחה,דבלין,דושנבה,פריטאון,פונפוטי,גאבורון,ג'ורג'טאון,גיטגה,גואטמלה סיטי,האנוי,הארארה,הוואנה,הלסינקי,הוניארה,אסלאמאבאד,ג'קרטה,ירושלים,ג'ובה,קאבול,קמפלה,קטמנדו,חרטום,קיגאלי,קינגסטון,קינגסטאון,קינשאסה,קואלה לומפור,כווית סיטי,קייב,לה פאס,ליברוויל,לילונגווה,לימה,ליסבון,לובליאנה,לובמבה,לומה,לונדון,לואנדה,לוסקה,לוקסמבורג,מדריד,מג'ורו,מלאבו,מאלה,מנגואה,מנאמה,מנילה,מפוטו,מסרו,מבבנה,מקסיקו סיטי,מינסק,מוגדישו,מונקו,מונרוביה,מונטווידאו,מורוני,מוסקבה,מוסקט,נג'מנה,ניירובי,נסאו,נייפידאו,ניו דלהי,נגרולמוד,ניאמיי,ניקוסיה,נואקשוט,נוקואלופה,אוסלו,אוטווה,ואגאדוגו,פליקיר,פנמה סיטי,פרמריבו,פריז,פנום פן,פודגוריצה,פורט לואי,פורט מורסבי,פורט אוף ספיין,פורט וילה,פורט-או-פרנס,פורטו-נובו,פראג,פראיה,פרטוריה,פוטרג'איה,פיונגיאנג,קיטו,רבאט,רייקיאוויק,ריגה,ריאד,רומא,רוזו,סנט ג'ורג'ס,סנט ג'ונס,סן חוסה,סן מרינו,סן סלוודור,צנעא,סנטיאגו,סנטו דומינגו,סרייבו,סיאול,סינגפור,סקופיה,סופיה,דרום טאראווה,סרי ג'איאווארדנפורה קוטה,סטוקהולם,סוקרה,סובה,סאו טומה,טאיפיי,טאלין,טשקנט,טביליסי,טגוסיגלפה,טהרן,האג,ת'ימפו,טירנה,טוקיו,טריפולי,תוניס,אולן בטור,ואדוץ,ולטה,קריית הוותיקן,ויקטוריה,וינה,ויינטיאן,וילנה,ורשה,וושינגטון די. סי.,ולינגטון,וינדהוק,יאמוסוקרו,יאונדה,יארן,ירוואן,זאגרב`,
         countries: `אפגניסטן,אלבניה,אלג'יריה,אנדורה,אנגולה,אנטיגואה וברבודה,ארגנטינה,ארמניה,אוסטרליה,אוסטריה,אזרבייג'ן,איי בהאמה,בחריין,בנגלדש,ברבדוס,בלארוס,בלגיה,בליז,בנין,בהוטן,בוליביה,בוסניה והרצגובינה,בוצוואנה,ברזיל,ברוניי,בולגריה,בורקינה פאסו,בורונדי,כף ורדה,קמבודיה,קמרון,קנדה,הרפובליקה המרכז-אפריקאית,צ'אד,צ'ילה,סין,קולומביה,קומורו,הרפובליקה הדמוקרטית של קונגו,הרפובליקה של קונגו,קוסטה ריקה,חוף השנהב,קרואטיה,קובה,קפריסין,צ'כיה,דנמרק,ג'יבוטי,דומיניקה,הרפובליקה הדומיניקנית,אקוודור,מצרים,אל סלוודור,גינאה המשוונית,אריתריאה,אסטוניה,אסוואטיני,אתיופיה,פיג'י,פינלנד,צרפת,גבון,גמביה,גאורגיה,גרמניה,גאנה,יוון,גרנדה,גואטמלה,גינאה,גינאה-ביסאו,גיאנה,האיטי,הונדורס,הונגריה,איסלנד,הודו,אינדונזיה,איראן,עיראק,אירלנד,ישראל,איטליה,ג'מייקה,יפן,ירדן,קזחסטן,קניה,קיריבטי,קוריאה הצפונית,קוריאה הדרומית,כווית,קירגיזסטן,לאוס,לטביה,לבנון,לסוטו,ליבריה,לוב,ליכטנשטיין,ליטא,לוקסמבורג,מדגסקר,מלאווי,מלזיה,האיים המלדיביים,מאלי,מלטה,איי מרשל,מאוריטניה,מאוריציוס,מקסיקו,מיקרונזיה,מולדובה,מונקו,מונגוליה,מונטנגרו,מרוקו,מוזמביק,מיאנמר,נמיביה,נאורו,נפאל,הולנד,ניו זילנד,ניקרגואה,ניז'ר,ניגריה,מקדוניה הצפונית,נורווגיה,עומאן,פקיסטן,פלאו,פנמה,פפואה גינאה החדשה,פרגוואי,פרו,הפיליפינים,פולין,פורטוגל,קטר,רומניה,רוסיה,רואנדה,סנט קיטס ונוויס,סנט לוסיה,סנט וינסנט והגרנדינים,סמואה,סן מרינו,סאו טומה ופרינסיפה,ערב הסעודית,סנגל,סרביה,סיישל,סיירה לאון,סינגפור,סלובקיה,סלובניה,איי שלמה,סומליה,דרום אפריקה,דרום סודן,ספרד,סרי לנקה,סודן,סורינאם,שוודיה,שווייץ,סוריה,טג'יקיסטן,טנזניה,תאילנד,טימור-לסטה,טוגו,טונגה,טרינידד וטובגו,תוניסיה,טורקיה,טורקמניסטן,טובאלו,אוגנדה,אוקראינה,איחוד האמירויות הערביות,הממלכה המאוחדת,ארצות הברית,אורוגוואי,אוזבקיסטן,ונואטו,ונצואלה,וייטנאם,תימן,זמביה,זימבבואה,הכס הקדוש,ותיקן,אנגליה,סקוטלנד,בריטניה,אזרביג'אן,בוטסואנה,בוטצואנה,קמא,קונגו,סלוודור,סלבדור,גיאורגיה,גאנה,צפון קוריאה,דרום קוריאה,מינמר,צפון אירלנד,נורבגיה,פקיסטאן,פיליפינים,סישל,איי סיישל,סיישל,דובאי,אבו דאבי,איחוד האמירויות,טורקמניסטאן,תורקמניסטאן,ססירה ליאון,סומלילנד,טוניסיה,ויאטנם,ויאטנאם,זימבבווה,שבדיה`,
@@ -140,10 +140,11 @@
         girls: `אביגיל,אביטל,אדל,אור,אורה,אורית,אורלי,איילה,אילנה,אלונה,אסתר,אפרת,אריאלה,בלה,ברכה,בתיה,גאולה,גילה,גלית,דבורה,דגנית,דינה,דליה,דנה,דניאלה,דפנה,הגר,הדס,הדסה,הילה,ורד,זהבה,חווה,חוה,חיה,חנה,טליה,טובה,יונה,יוכבד,יעל,יפה,יפהפיה,ירדנה,לאה,לבנה,ליהי,ליטל,מאירה,מיה,מיכל,מיכאלה,מירב,מלכה,מנוחה,מרגלית,מרים,נועה,נורית,נטלי,נילי,נעמי,נעמה,נעה,סיגל,סיוון,סמדר,עדינה,עדנה,עליזה,ענבל,ענת,עופרה,עפרה,פנינה,צביה,ציונה,ציפי,ציפורה,קרן,רחל,רחלי,רייזל,רינה,רבקה,רות,רותי,שושנה,שולי,שולמית,שוש,שירה,שירלי,שלומית,שמרית,שני,שרה,שרון,תמר,תקווה,אביבה,אביה,אבישג,אגם,אודליה,אופירה,אורטל,אוריה,אושרית,אחוה,אחווה,אידה,איילת,אילת,אירה,אירינה,איריס,אלה,אלונה,אליזבט,אליזבת,אלינור,אליס,אלישבע,אלכסנדרה,אמה,אמונה,אמיליה,אמינה,אמירה,אסיה,אסיל,אסנת,אסתר,אפנאן,אפרת,אריאל,אריאלה,בלה,בלומה,בסמה,בר,ברכה,ברוריה,בת,בת אל,בת חן,בת עמי,בת שבע,גאולה,גבי,גבריאלה,גולדה,גולי,גולן,גוני,גורית,גילי,גלית,גני,ג'נט,ג'ני,ג'סיקה,דאיה,דבורה,דבי,דגנית,דונה,דורית,דורית,דורין,דיאנה,דינה,דיקלה,דליה,דלית,דנה,דניאל,דניאלה,דפנה,דקלה,הגר,הדר,הודיה,הדס,הדסה,הילה,הלנה,הני,הניה,הרצליה,ורד,ורדה,ורדיה,ורדית,זהבה,זהבית,זוהר,זיו,זיוה,זיוית,זיסל,זמירה,ז'אנה,חבצלת,חגית,חדוה,חמדה,חן,חנה,חני,חניה,חסידה,חסיה,חפציבה,טובה,טובה,טובי,טל,טלי,טליה,טמירה,טניה,יאירה,יובל,יוכי,יוכבד,יולי,יוליה,יונה,יונית,יסמין,יעלה,יערית,יפה,יפית,יפעת,יקירה,ירדנה,ירקונה,ישראלה,כוכבה,כרמלה,כרמית,לאה,לבנה,לי,ליאורה,ליאת,ליבי,ליזה,ליזט,לילך,לימור,לין,לינוי,ליעד,לירון,מאיה,מאירה,מאשה,מגי,מדלן,מור,מוריאל,מורן,מזל,מיטל,מיכל,מילה,מינה,מירב,מירי,מרב,מרגלית,מרים,מרינה,מרסל,מרתה,נוה,נוי,נויה,נחמה,נטע,ניקול,נירה,נירית,נלי,נעמי,נעמה,נורית,נטשה,נינה,נסיה,נתניה,סאלי,סבינה,סברינה,סגולה,סוזן,סוזי,סופי,סופיה,סורי,סטלה,סיגלית,סיון,סילביה,סלויה,סלין,סמדר,סמירה,סנה,סניה,ספיר,עדה,עדינה,עדי,עופרית,עטרה,עידית,עינב,עינת,עליזה,עלמה,עמליה,ענבר,עפרה,ערבה,פאינה,פולינה,פנינה,פרחה,פרלה,צביה,צדף,צופיה,צילה,צליל,צפנת,צפרה,צרויה,קורין,קלרה,קמה,קמי,קנדרה,קסניה,קרא,קרין,קרלה,קרן,קרן אור,קרסטין,רובי,רוזה,רוזלינד,רוזי,רוזן,רוחמה,רומי,רונה,רוני,רונית,רחל,רייצ'ל,רינה,רינת,ריקי,ריטה,רמית,רננה,רעות,רעיה,רפאלה,רקפת,שגית,שולה,שולמית,שוש,שושנה,שחר,שי,שיינה,שילת,שיר,שירה,שירז,שירלי,שלוה,שלומית,שמחה,שמרית,שני,שקד,שרי,שרית,שרה,תאנה,תהילה,תום,תומר,תות,תחיה,תמי,תמילה,תמר,תמרה,תקוה,תרצה`
     };
 
+    // פונקציה מסודרת ליצירת המאגר הנקי שעובד!
     const NORMALIZED_DATA = {};
     for (let key in RAW_DATA) {
-        const rawWords = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
-        NORMALIZED_DATA[key] = rawWords.map(w => normalizeHebrew(w));
+        const wordsArray = RAW_DATA[key].split(',').map(w => w.trim()).filter(w => w.length > 0);
+        NORMALIZED_DATA[key] = wordsArray.map(w => normalizeHebrew(w));
     }
 
     const CATEGORIES = [
@@ -214,18 +215,6 @@
     socket.on('connect', () => {
         if (currentRoom && myName) {
             socket.emit('joinRoom', { roomId: currentRoom, playerName: myName, isHostClaim: isHost });
-
-            const activeScreen = document.querySelector('.screen.active');
-            if (activeScreen && activeScreen.id === 'waiting-results' && hasSubmittedCurrentRound) {
-                setTimeout(() => {
-                    socket.emit('submitScore', { 
-                        roomId: currentRoom, 
-                        correctCount: lastCorrectCount, 
-                        timeInSeconds: lastTimeInSeconds, 
-                        answers: playerAnswers 
-                    });
-                }, 1000);
-            }
         }
     });
 
@@ -253,16 +242,7 @@
         myName = document.getElementById('player-name').value.trim();
         const room = document.getElementById('room-code').value.toUpperCase().trim();
         
-        if (!myName) {
-            alert("שכחת להזין את השם שלך! אנא כתוב את שמך בתיבה העליונה.");
-            document.getElementById('player-name').focus();
-            return;
-        }
-        if (!room) {
-            alert("אנא הכנס קוד חדר!");
-            document.getElementById('room-code').focus();
-            return;
-        }
+        if (!myName || !room) return;
         
         currentRoom = room;
         isMultiplayerMode = true;
@@ -302,7 +282,7 @@
         sessionStorage.setItem('isHost', isHost ? 'true' : 'false');
 
         const activeScreen = document.querySelector('.screen.active');
-        if (activeScreen && (activeScreen.id === 'game-screen' || activeScreen.id === 'waiting-results' || activeScreen.id === 'results' || activeScreen.id === 'countdown-screen')) {
+        if (activeScreen && (activeScreen.id === 'game-screen' || activeScreen.id === 'waiting-results' || activeScreen.id === 'results')) {
             return;
         }
 
@@ -367,7 +347,6 @@
                 clearInterval(iv);
                 document.getElementById('selected-letter').innerText = currentLetter;
                 showScreen('letter-screen');
-                
                 setTimeout(() => { showGameFields(); }, 2000);
             } else {
                 document.getElementById('number').innerText = count;
@@ -420,6 +399,16 @@
         return word.trim().replace(/['"־\-]/g, '').replace(/יי+/g, 'י').replace(/וו+/g, 'ו');
     }
 
+    function isMatchLocalDatabase(userWord, categoryId) {
+        const cleanUser = normalizeHebrew(userWord);
+        const dbArray = NORMALIZED_DATA[categoryId] || [];
+        return dbArray.some(cleanDb => {
+            return cleanDb === cleanUser || 
+                   (cleanDb.startsWith(cleanUser) && cleanDb.length - cleanUser.length <= 1) ||
+                   (cleanUser.startsWith(cleanDb) && cleanUser.length - cleanDb.length <= 1);
+        });
+    }
+
     async function checkWordWithServer(catLabel, val) {
         try {
             const fetchPromise = fetch('/api/ask-judge', {
@@ -441,11 +430,11 @@
             }
             return { isValid: !!data.isValid, reason: data.reason || '' };
         } catch(e) {
-            return { isValid: false, reason: "נפסל (שגיאת חיבור)" };
+            return { isValid: false, reason: "נפסל (שגיאת תקשורת)" };
         }
     }
 
-    // קוד בדיקה חסין מפלדה - עטוף מכל הכיוונים שלא יוכל לקרוס!
+    // קוד בדיקה חסין מפלדה וללא קריסות פתאומיות
     async function submitGame() {
         unlockAudio(); 
         clearInterval(timerInterval);
@@ -472,7 +461,7 @@
             socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
         }
 
-        if (statusText) statusText.innerText = "מנקה ובודק נתונים...";
+        if (statusText) statusText.innerText = "בודק נתונים במאגר המקומי...";
 
         for (const cat of CATEGORIES) {
             try {
@@ -494,14 +483,8 @@
                     continue;
                 } 
                 
-                const dbArray = NORMALIZED_DATA[cat.id] || [];
-                const isMatchLocal = dbArray.some(cleanDb => {
-                    return cleanDb === normalizedVal || 
-                           (cleanDb.startsWith(normalizedVal) && cleanDb.length - normalizedVal.length <= 1) ||
-                           (normalizedVal.startsWith(cleanDb) && normalizedVal.length - cleanDb.length <= 1);
-                });
-
-                if (isMatchLocal) {
+                // בדיקה במאגר המקומי המלא
+                if (isMatchLocalDatabase(val, cat.id)) {
                     lastCorrectCount++;
                     playerAnswers[cat.label] = { val: val, isCorrect: true, feedback: "" };
                 } else {
@@ -511,13 +494,14 @@
                     playerAnswers[cat.label] = { val: val, isCorrect: judgeRes.isValid, feedback: judgeRes.reason };
                 }
             } catch (err) {
-                playerAnswers[cat.label] = { val: "תקלה", isCorrect: false, feedback: "נפסל (תקלה)" };
+                console.error("שגיאה במילה:", cat.label, err);
+                playerAnswers[cat.label] = { val: "תקלה", isCorrect: false, feedback: "נפסל עקב תקלה" };
             }
         }
         
         hasSubmittedCurrentRound = true;
         if (statusText) {
-            statusText.innerText = isMultiplayerMode ? "הבדיקה הסתיימה! ממתין לשאר השחקנים..." : "מסיים...";
+            statusText.innerText = isMultiplayerMode ? "הבדיקה הסתיימה! ממתין לשאר השחקנים..." : "מכין את התוצאות שלך...";
         }
 
         if (isMultiplayerMode) {
@@ -571,19 +555,18 @@
         let myData = leaderboard.find(p => p.name === myName);
         if (!myData) myData = { name: myName, answers: playerAnswers };
         if (!myData.answers) myData.answers = playerAnswers;
-        
         showFinalResults(leaderboard, myData);
     });
 
     function getAnswerCellHtml(ans) {
-        if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
+        if (!ans || !ans.val || ans.val === "דלג" || ans.val === "---" || ans.val === "תקלה") return '<td style="color:#999; vertical-align:middle;">⚪ דילג</td>';
         let status = '';
         if (ans.isCorrect) {
             if (ans.feedback) status = '<br><span style="color:green; font-size:0.8em;">🤖 אושר (שופט)</span>';
             else status = '<br><span style="color:green; font-size:0.8em;">✅ אושר (מאגר)</span>';
         } else {
             status = '<br><span style="color:red; font-size:0.8em;">❌ נפסל</span>';
-            if (ans.feedback) status += `<br><span style="font-size:0.75em; color:#666;">${ans.feedback}</span>`;
+            if (ans.feedback) status += `<br><span style="font-size:0.75em; color:#666;">(${ans.feedback})</span>`;
         }
         return `<td style="vertical-align:middle;"><strong>${ans.val}</strong>${status}</td>`;
     }
