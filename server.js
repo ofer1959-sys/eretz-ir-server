@@ -24,10 +24,10 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts wi
 const rooms = {};
 
 // ==========================================
-// פנייה ישירה למודל הקלאסי והפתוח ביותר - 1.0-pro
+// פנייה ישירה למודל החדש והמעודכן שפתוח בחשבון שלך!
 // ==========================================
 async function askGeminiDirectly(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -51,7 +51,7 @@ async function askGeminiDirectly(promptText) {
 }
 
 // ==========================================
-// כלי בילוש 1: בדיקת תקשורת למודל 1.0-pro
+// כלי בילוש 1: בדיקת תקשורת למודל 2.5-flash
 // ==========================================
 app.get('/api/test-gemini', async (req, res) => {
     if (apiKey === "MISSING_KEY") {
@@ -67,7 +67,7 @@ app.get('/api/test-gemini', async (req, res) => {
 });
 
 // ==========================================
-// כלי בילוש 2: שואב את רשימת המודלים שפתוחים למפתח שלך!
+// כלי בילוש 2: שואב את רשימת המודלים שפתוחים למפתח שלך
 // ==========================================
 app.get('/api/list-models', async (req, res) => {
     try {
