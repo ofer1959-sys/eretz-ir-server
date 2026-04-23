@@ -19,7 +19,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 // קריאת המפתח מתוך Render
 const apiKey = process.env.GEMINI_API_KEY || "MISSING_KEY";
 
-// הדפסה ללוג של השרת כדי שנוכל לראות ב-Render אם המפתח בכלל קיים
 console.log("=== SERVER STARTUP ===");
 console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts with " + apiKey.substring(0, 4) + "...)");
 
@@ -27,7 +26,7 @@ const genAI = new GoogleGenerativeAI(apiKey);
 const rooms = {};
 
 // ==========================================
-// כלי עזר מיוחד לסבא עופר לבדיקת השרת!
+// כלי עזר לסבא עופר לבדיקת השרת
 // ==========================================
 app.get('/api/test-gemini', async (req, res) => {
     if (apiKey === "MISSING_KEY") {
@@ -35,7 +34,8 @@ app.get('/api/test-gemini', async (req, res) => {
     }
     
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // שינוי שם המודל לגרסה היציבה העדכנית!
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         const result = await model.generateContent("השב במילה אחת בלבד: האם אתה מחובר?");
         const text = result.response.text().trim();
         res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text });
@@ -53,7 +53,8 @@ app.post('/api/ask-judge', async (req, res) => {
     }
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // שינוי שם המודל גם כאן!
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
         const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
         
@@ -86,7 +87,6 @@ app.post('/api/ask-judge', async (req, res) => {
         
         if (response.timeout) return res.json({ points: 5, reason: "עומס ברשת (אושר חלקית)" });
         if (response.error) {
-            // החזרת השגיאה המדויקת באנגלית כדי שנבין מה הבעיה!
             return res.json({ points: 5, reason: `API Error: ${response.details.substring(0,25)}...` });
         }
 
