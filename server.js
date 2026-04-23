@@ -24,11 +24,10 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts wi
 const rooms = {};
 
 // ==========================================
-// פנייה ישירה למודל הפלאש 1.5 היציב והרשמי
+// פנייה ישירה למודל הקלאסי והפתוח ביותר - 1.0-pro
 // ==========================================
 async function askGeminiDirectly(promptText) {
-    // התיקון: חזרה לשם המודל הרשמי והיציב ביותר בגרסת v1beta
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -52,11 +51,11 @@ async function askGeminiDirectly(promptText) {
 }
 
 // ==========================================
-// כלי עזר לסבא עופר לבדיקת השרת
+// כלי בילוש 1: בדיקת תקשורת למודל 1.0-pro
 // ==========================================
 app.get('/api/test-gemini', async (req, res) => {
     if (apiKey === "MISSING_KEY") {
-        return res.json({ status: "Error", message: "API Key is missing in Render environment variables." });
+        return res.json({ status: "Error", message: "API Key is missing." });
     }
     
     try {
@@ -64,6 +63,19 @@ app.get('/api/test-gemini', async (req, res) => {
         res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text.trim() });
     } catch (e) {
         res.json({ status: "Error", api_key_start: apiKey.substring(0, 4), message: e.message });
+    }
+});
+
+// ==========================================
+// כלי בילוש 2: שואב את רשימת המודלים שפתוחים למפתח שלך!
+// ==========================================
+app.get('/api/list-models', async (req, res) => {
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        res.json({ error: e.message });
     }
 });
 // ==========================================
@@ -101,16 +113,13 @@ app.post('/api/ask-judge', async (req, res) => {
             return { text: text };
         }).catch(e => {
             isResolved = true; 
-            console.error("Gemini Direct API Error:", e.message); 
             return { error: true, details: e.message }; 
         });
         
         const response = await Promise.race([result, timeout]);
         
         if (response.timeout) return res.json({ points: 5, reason: "עומס ברשת (אושר חלקית)" });
-        if (response.error) {
-            return res.json({ points: 5, reason: `שגיאת רשת (אושר חלקית)` });
-        }
+        if (response.error) return res.json({ points: 5, reason: `שגיאת רשת (אושר חלקית)` });
 
         let cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(cleanText));
