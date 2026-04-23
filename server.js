@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
@@ -16,14 +15,41 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ניקוי רווחים מהמפתח שמוגדר ב-Render
+// קריאת המפתח מתוך Render וניקוי רווחים
 const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
 
 console.log("=== SERVER STARTUP ===");
 console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts with " + apiKey.substring(0, 4) + "...)");
 
-const genAI = new GoogleGenerativeAI(apiKey);
 const rooms = {};
+
+// ==========================================
+// "נשק יום הדין": פונקציה שמדברת ישירות עם שרתי גוגל ללא תוכנת ביניים!
+// ==========================================
+async function askGeminiDirectly(promptText) {
+    // פנייה ישירה למודל הפלאש 1.5 העדכני ביותר בגרסת הבטא
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`HTTP Error ${response.status}: ${errorData}`);
+    }
+
+    const data = await response.json();
+    if (data && data.candidates && data.candidates.length > 0) {
+        return data.candidates[0].content.parts[0].text;
+    } else {
+        throw new Error("No valid response from Gemini");
+    }
+}
 
 // ==========================================
 // כלי עזר לסבא עופר לבדיקת השרת
@@ -34,11 +60,8 @@ app.get('/api/test-gemini', async (req, res) => {
     }
     
     try {
-        // שימוש במודל הקלאסי והמוכר - gemini-pro
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-        const result = await model.generateContent("השב במילה אחת בלבד: האם אתה מחובר?");
-        const text = result.response.text().trim();
-        res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text });
+        const text = await askGeminiDirectly("השב במילה אחת בלבד: האם אתה מחובר?");
+        res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text.trim() });
     } catch (e) {
         res.json({ status: "Error", api_key_start: apiKey.substring(0, 4), message: e.message });
     }
@@ -53,8 +76,6 @@ app.post('/api/ask-judge', async (req, res) => {
     }
 
     try {
-        // שימוש במודל הקלאסי - gemini-pro
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
         
@@ -67,19 +88,20 @@ app.post('/api/ask-judge', async (req, res) => {
            - אם המילה קרובה מאוד אבל עם טעות כתיב צורמת - החזר points: 5.
            - אם המילה שגויה לחלוטין לקטגוריה - החזר points: 0.
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף) במבנה הבא:
-        {"points": 10, "reason": "הסבר קצר"}`;
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
+        {"points": 10/5/0, "reason": "הסבר קצר"}`;
         
         let isResolved = false;
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
         }, 8500));
         
-        const result = model.generateContent(prompt).then(r => {
-            isResolved = true; return r;
+        const result = askGeminiDirectly(prompt).then(text => {
+            isResolved = true; 
+            return { text: text };
         }).catch(e => {
             isResolved = true; 
-            console.error("Gemini API Error:", e.message); 
+            console.error("Gemini Direct API Error:", e.message); 
             return { error: true, details: e.message }; 
         });
         
@@ -87,11 +109,11 @@ app.post('/api/ask-judge', async (req, res) => {
         
         if (response.timeout) return res.json({ points: 5, reason: "עומס ברשת (אושר חלקית)" });
         if (response.error) {
-            return res.json({ points: 5, reason: `API Error: ${response.details.substring(0,25)}...` });
+            return res.json({ points: 5, reason: `שגיאת רשת (אושר חלקית)` });
         }
 
-        let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(text));
+        let cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(cleanText));
     } catch (e) {
         res.json({ points: 5, reason: "תקלת שרת (אושר חלקית)" });
     }
