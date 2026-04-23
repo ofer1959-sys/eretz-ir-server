@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
 
+// הגנה נגד קריסות שרת פתאומיות
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
 
@@ -23,7 +24,9 @@ function calculateAndSendResults(roomId) {
     
     const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
     room.players.forEach(p => {
-        let score = p.baseScore || 0; // הניקוד מגיע כעת ישירות מחישוב הלקוח (10 או 5)
+        // הניקוד כבר מחושב במדויק (עם החצאים והחלוקה) אצל השחקן
+        let score = p.baseScore || 0; 
+        
         if (minTime > 0 && minTime !== Infinity && p.time < 999) {
             const excessRatio = (p.time - minTime) / minTime;
             if (excessRatio > 0.50) {
@@ -77,10 +80,16 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('updatePlayers', room.players);
     });
 
-    socket.on('startGame', (roomId) => {
+    socket.on('startGame', (data) => {
+        const roomId = data.roomId;
+        const disabledCategories = data.disabledCategories || [];
+        
         if(rooms[roomId]) {
             rooms[roomId].gameStarted = true;
-            io.to(roomId).emit('gameStarted', rooms[roomId].letter);
+            io.to(roomId).emit('gameStarted', { 
+                letter: rooms[roomId].letter, 
+                disabledCategories: disabledCategories 
+            });
         }
     });
 
@@ -90,7 +99,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
         const room = rooms[roomId];
-        if (!room) return socket.emit('gameError', 'השרת התאפס. נאלץ להתחיל מחדש.');
+        if (!room) return socket.emit('gameError', 'השרת עבר ריענון והחדר אבד. נאלץ להתחיל משחק חדש.');
         
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
