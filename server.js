@@ -1,9 +1,11 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
+
+// אנחנו משתמשים כעת בספריה הרשמית אך מכוונים אותה ל-API הנכון
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 process.on('uncaughtException', (err) => console.error('Uncaught:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
@@ -16,13 +18,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// הפקודה שמגלחת רווחים נסתרים מהסיסמה
 const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
 
 console.log("=== SERVER STARTUP ===");
 console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES (Starts with " + apiKey.substring(0, 4) + "...)");
 
+// כאן הסוד: אנחנו יוצרים את החיבור ומגדירים לו לעבוד מול הגרסה העדכנית ביותר של גוגל!
 const genAI = new GoogleGenerativeAI(apiKey);
+
 const rooms = {};
 
 // ==========================================
@@ -34,8 +37,8 @@ app.get('/api/test-gemini', async (req, res) => {
     }
     
     try {
-        // שימוש במודל הקלאסי והבטוח ביותר!
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        // שימוש במודל הפלאש עם ציון גרסת ה-API החדשה
+        const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" }, { apiVersion: 'v1beta' });
         const result = await model.generateContent("השב במילה אחת בלבד: האם אתה מחובר?");
         const text = result.response.text().trim();
         res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text });
@@ -53,8 +56,7 @@ app.post('/api/ask-judge', async (req, res) => {
     }
 
     try {
-        // שימוש במודל הקלאסי והבטוח ביותר גם בשיפוט!
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const model = genAI.getGenerativeModel({ model: "models/gemini-1.5-flash" }, { apiVersion: 'v1beta' });
         const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
         
