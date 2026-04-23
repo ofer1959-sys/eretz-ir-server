@@ -16,7 +16,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// התיקון הגדול: פקודת trim() מגלחת רווחים נסתרים מהסיסמה!
+// הפקודה שמגלחת רווחים נסתרים מהסיסמה
 const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
 
 console.log("=== SERVER STARTUP ===");
@@ -34,8 +34,8 @@ app.get('/api/test-gemini', async (req, res) => {
     }
     
     try {
-        // החזרנו לשם המודל התקין והיציב
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // שימוש במודל הקלאסי והבטוח ביותר!
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const result = await model.generateContent("השב במילה אחת בלבד: האם אתה מחובר?");
         const text = result.response.text().trim();
         res.json({ status: "Success", api_key_start: apiKey.substring(0, 4), gemini_response: text });
@@ -53,7 +53,8 @@ app.post('/api/ask-judge', async (req, res) => {
     }
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // שימוש במודל הקלאסי והבטוח ביותר גם בשיפוט!
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
         הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
         
