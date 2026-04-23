@@ -22,9 +22,9 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
 
 const rooms = {};
 
-// פנייה ישירה למודל החדש (gemini-2.5-flash) שזמין בחשבונך
+// פנייה ישירה למודל הפלאש 1.5 הרשמי
 async function askGeminiDirectly(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -82,14 +82,18 @@ app.post('/api/ask-judge-batch', async (req, res) => {
            - 5 נקודות לתשובה קרובה, סלנג, או טעות כתיב צורמת של אות אחת.
            - 0 נקודות לתשובה שגויה לחלוטין.
 
+        הוראה קריטית לגבי הסברים (reason):
+        אם אתה מעניק 0 או 5 נקודות, עליך לכתוב הסבר קצר לסיבה. ההסבר חייב להיות באורך של עד 12 מילים לכל היותר!
+        אם אישרת במלואו (10 נקודות), כתוב פשוט "אושר".
+
         התשובות לבדיקה:
         ${items.map(i => `- מזהה: "${i.catId}", קטגוריה: "${i.categoryLabel}", תשובה של השחקן: "${i.answer}"`).join('\n')}
 
         החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
         {
           "results": {
-            "catId_1": {"points": 10, "reason": "הסבר קצר"},
-            "catId_2": {"points": 0, "reason": "הסבר קצר"}
+            "catId_1": {"points": 10, "reason": "אושר"},
+            "catId_2": {"points": 0, "reason": "הסבר עד 12 מילים"}
           }
         }`;
         
@@ -110,7 +114,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         
         if (response.timeout || response.error) {
             let results = {};
-            items.forEach(i => { results[i.catId] = { points: 5, reason: "עומס רשת (אושר חלקית)" }; });
+            items.forEach(i => { results[i.catId] = { points: 5, reason: "עומס ברשת - אושר חלקית" }; });
             return res.json({ results });
         }
 
@@ -118,7 +122,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         res.json(JSON.parse(cleanText));
     } catch (e) {
         let results = {};
-        items.forEach(i => { results[i.catId] = { points: 5, reason: "תקלת שרת (אושר חלקית)" }; });
+        items.forEach(i => { results[i.catId] = { points: 5, reason: "תקלת שרת - אושר חלקית" }; });
         res.json({ results });
     }
 });
@@ -229,6 +233,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // קליטת הערעור מהשחקן, עדכון הנתונים בשרת ושידור התוצאות מחדש
     socket.on('submitAppeal', ({ roomId, playerName, newTotalScore, answers }) => {
         const room = rooms[roomId];
         if (!room) return;
