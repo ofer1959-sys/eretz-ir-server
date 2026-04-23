@@ -1,12 +1,12 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const path = require('path');
 const cors = require('cors');
 
-// הגנה נגד קריסות שרת פתאומיות
-process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
-process.on('unhandledRejection', (err) => console.error('Unhandled Rejection:', err));
+process.on('uncaughtException', (err) => console.error('Uncaught:', err));
+process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
 
 const app = express();
 const server = http.createServer(app);
@@ -16,7 +16,50 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const rooms = {};
+
+// שופט הערעורים שלנו
+app.post('/api/ask-judge', async (req, res) => {
+    const { category, letter, answer } = req.body;
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. השחקן ערער על המילה שלו.
+        הקטגוריה: "${category}", האות הנדרשת: "${letter}", התשובה שהשחקן כתב: "${answer}".
+        
+        כללי הערעור:
+        1. האות הראשונה: המילה התקנית חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מאותיות א/י/ו/ה עודפות או חסרות, או שגיאת כתיב קלה של אות אחת.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל (כמו "פדואל") גם אם אינם מוכרים לכל.
+        4. הערכת ניקוד: 
+           - אם המילה נכונה ב-100% לקטגוריה - החזר points: 10.
+           - אם המילה היא סלנג מאוד לא מקובל, או קרובה אך לא מדויקת - החזר points: 5.
+           - אם המילה שגויה לחלוטין (למשל אילת כעיר בירה) - החזר points: 0.
+
+        החזר אך ורק JSON תקין במבנה הבא:
+        {"points": 10/5/0, "reason": "הסבר קצר של 2-3 מילים"}`;
+        
+        let isResolved = false;
+        const timeout = new Promise((resolve) => setTimeout(() => {
+            if (!isResolved) resolve({ timeout: true });
+        }, 5500));
+        
+        const result = model.generateContent(prompt).then(r => {
+            isResolved = true; return r;
+        }).catch(e => {
+            isResolved = true; return { error: true };
+        });
+        
+        const response = await Promise.race([result, timeout]);
+        
+        if (response.timeout || response.error) return res.json({ points: -1, reason: "עומס בשרת הערעורים" });
+
+        let text = response.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(text));
+    } catch (e) {
+        res.json({ points: -1, reason: "תקלה בערעור" });
+    }
+});
 
 function calculateAndSendResults(roomId) {
     const room = rooms[roomId];
@@ -24,7 +67,6 @@ function calculateAndSendResults(roomId) {
     
     const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
     room.players.forEach(p => {
-        // הניקוד כבר מחושב במדויק (עם החצאים והחלוקה) אצל השחקן
         let score = p.baseScore || 0; 
         
         if (minTime > 0 && minTime !== Infinity && p.time < 999) {
@@ -119,6 +161,23 @@ io.on('connection', (socket) => {
 
             if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
         }
+    });
+
+    // קבלת ערעור משחקן
+    socket.on('submitAppeal', ({ roomId, playerName, newTotalScore, answers }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        const player = room.players.find(p => p.name === playerName);
+        if (player) {
+            player.baseScore = newTotalScore;
+            player.answers = answers;
+            // מכריזים מחדש על התוצאות לכולם
+            calculateAndSendResults(roomId);
+        }
+    });
+
+    socket.on('announceAppeal', ({ roomId }) => {
+        io.to(roomId).emit('appealStarted');
     });
 
     socket.on('forceEndGame', (data) => {
