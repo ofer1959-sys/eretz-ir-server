@@ -20,7 +20,6 @@
         .btn-success { background: var(--success); color: white; }
         .btn-host { background: #8e44ad; color: white; margin-top: 15px;}
         .btn-danger { background: var(--danger); color: white; }
-        .btn-batch-appeal { background: var(--secondary); color: white; margin-top: 15px; padding: 15px; font-size: 1.3rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .countdown { font-size: 8rem; color: var(--primary); font-weight: bold; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
         .letter-display { font-size: 6rem; color: var(--secondary); font-weight: bold; margin: 1rem 0; }
@@ -147,14 +146,10 @@
 
     <div id="results" class="screen">
         <h1 id="winner-announcement" style="color: var(--success); font-size: 2rem; margin-bottom: 5px;"></h1>
-        <p id="appeal-timer" style="color:var(--secondary); font-weight:bold; margin-top:0; display:none;">זמן להגשת ערעורים: <span id="appeal-countdown">15</span> שניות</p>
-        
         <table class="leaderboard-table">
             <thead><tr><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן</th></tr></thead>
             <tbody id="leaderboard-body"></tbody>
         </table>
-
-        <div id="batch-appeal-container"></div>
 
         <div id="answers-comparison-container" style="margin-top: 20px;"></div>
 
@@ -272,10 +267,8 @@
     let timerInterval;
     let playerAnswers = {};
     let isMultiplayerMode = false;
-    let hasSubmittedCurrentRound = false;
     let lastTimeInSeconds = 0;
     let myTotalPoints = 0;
-    let appealsUsed = 0; 
 
     const socket = io();
     let currentRoom = sessionStorage.getItem('currentRoom') || '';
@@ -300,6 +293,16 @@
             if(document.getElementById('join-player-name')) {
                 document.getElementById('join-player-name').value = myName;
             }
+        }
+
+        // טעינת בחירת הקטגוריות מהמשחק הקודם
+        const savedDisabledCats = JSON.parse(sessionStorage.getItem('savedCategories') || '[]');
+        if (savedDisabledCats.length > 0) {
+            document.querySelectorAll('.cat-disable-cb').forEach(cb => {
+                if (savedDisabledCats.includes(cb.value)) {
+                    cb.checked = true;
+                }
+            });
         }
     };
 
@@ -376,6 +379,8 @@
             return alert("חייבים להשאיר לפחות קטגוריה אחת פעילה!");
         }
         disabledCategoriesList = disabled;
+        sessionStorage.setItem('savedCategories', JSON.stringify(disabledCategoriesList));
+        sessionStorage.setItem('myName', myName);
         
         isMultiplayerMode = false;
         
@@ -399,6 +404,7 @@
         isHost = true;
         sessionStorage.setItem('myName', myName);
         sessionStorage.setItem('isHost', 'true');
+        sessionStorage.setItem('savedCategories', JSON.stringify(disabledCategoriesList));
         
         socket.emit('createRoom', { hostName: myName, disabledCategories: disabledCategoriesList });
     }
@@ -515,7 +521,6 @@
     }
 
     function showGameFields() {
-        appealsUsed = 0; 
         showScreen('game-screen');
         document.getElementById('game-letter-header').innerText = "האות היא: " + currentLetter;
         const container = document.getElementById('categories-container');
@@ -529,7 +534,6 @@
 
         document.getElementById('host-updates').style.display = 'none';
         document.getElementById('host-updates-list').innerHTML = '';
-        hasSubmittedCurrentRound = false;
         
         activeCategories.forEach(cat => {
             const div = document.createElement('div');
@@ -552,7 +556,8 @@
         document.getElementById('timer-display').innerText = `זמן: ${mins}:${secs}`;
     }
 
-    function submitGame() {
+    // המנגנון האוטומטי החדש
+    async function submitGame() {
         unlockAudio(); 
         clearInterval(timerInterval);
         
@@ -569,15 +574,12 @@
         showScreen('waiting-results');
         const statusText = document.getElementById('checking-status');
         const waitMsg = document.getElementById('wait-for-others-msg'); 
-        
         if (waitMsg) waitMsg.style.display = isMultiplayerMode ? 'block' : 'none';
 
-        if (isMultiplayerMode) {
-            socket.emit('announceFinish', { roomId: currentRoom, playerName: myName });
-        }
-
         const pointsPerQuestion = activeCategories.length > 0 ? (100 / activeCategories.length) : 0;
+        let itemsToJudge = [];
 
+        // שלב א': בדיקה מקומית
         activeCategories.forEach(cat => {
             const inputEl = document.getElementById('input-' + cat.id);
             const val = inputEl ? inputEl.value.trim() : "";
@@ -599,28 +601,76 @@
                     feedback: validation.feedback,
                     catId: cat.id
                 };
-                myTotalPoints += questionPoints;
+
+                // אם נפסל מקומית - בודקים אם כדאי לשלוח ל-AI
+                let cleanUser = val.replace(/['"־\- ]/g, '');
+                if (!validation.isCorrect && cleanUser.startsWith(currentLetter)) {
+                    itemsToJudge.push({
+                        catId: cat.id,
+                        categoryLabel: cat.label,
+                        answer: val
+                    });
+                } else {
+                    myTotalPoints += questionPoints;
+                }
             }
         });
-        
-        myTotalPoints = formatScore(myTotalPoints);
-        hasSubmittedCurrentRound = true;
 
-        setTimeout(() => {
-            if (isMultiplayerMode) {
-                if (statusText) statusText.innerText = "הבדיקה הסתיימה! ממתין לשאר השחקנים...";
-                socket.emit('submitScore', { roomId: currentRoom, totalScore: myTotalPoints, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
-            } else {
-                if (statusText) statusText.innerText = "מכין את התוצאות שלך...";
-                const p = { name: myName, score: myTotalPoints, finalScore: myTotalPoints, time: lastTimeInSeconds, answers: playerAnswers };
-                showFinalResults([p], p);
+        // שלב ב': בדיקת AI אוטומטית למילים שנדחו
+        if (itemsToJudge.length > 0) {
+            if (statusText) statusText.innerText = "נא המתן לבדיקת שופט AI 🤖...";
+            if (isMultiplayerMode) socket.emit('announceAppeal', {roomId: currentRoom, playerName: myName});
+
+            try {
+                const res = await fetch('/api/ask-judge-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ letter: currentLetter, items: itemsToJudge })
+                });
+                
+                let data = await res.json();
+                
+                if (data.error) throw new Error(data.error);
+                if (!data.results) throw new Error("תשובת השופט אינה תקינה");
+                
+                itemsToJudge.forEach(item => {
+                    const resItem = data.results[item.catId];
+                    if (resItem) {
+                        let newPoints = 0;
+                        if(resItem.points === 10) newPoints = pointsPerQuestion;
+                        else if(resItem.points === 5) newPoints = pointsPerQuestion / 2;
+                        
+                        newPoints = formatScore(newPoints);
+                        playerAnswers[item.categoryLabel].points = newPoints;
+                        playerAnswers[item.categoryLabel].isCorrect = newPoints > 0;
+                        playerAnswers[item.categoryLabel].feedback = resItem.reason || (newPoints > 0 ? "אושר ע\"י שופט AI" : "הערעור נדחה");
+                        
+                        myTotalPoints += newPoints;
+
+                        // שמירה סודית של מילים מעולות בלבד
+                        if (Math.abs(newPoints - pointsPerQuestion) < 0.01) {
+                            socket.emit('logApprovedWord', { category: item.catId, word: item.answer });
+                        }
+                    }
+                });
+            } catch(e) {
+                console.error("שגיאה בחיבור לשופט", e);
+                showNotification("השופט כרגע בעומס, התשובות נפסלו זמנית.");
             }
-        }, 500);
-    }
+        }
 
-    socket.on('playerAnnouncedFinish', (playerName) => {
-        showNotification(`🔔 השחקן/ית <strong>${playerName}</strong> סיים/ה את המשחק!`);
-    });
+        myTotalPoints = formatScore(myTotalPoints);
+
+        // שלב ג': שליחת תוצאות והמתנה לאחרים (או סיום אם יחיד)
+        if (statusText) statusText.innerText = isMultiplayerMode ? "הבדיקה הסתיימה! ממתין לשאר השחקנים..." : "מכין את התוצאות שלך...";
+        
+        if (isMultiplayerMode) {
+            socket.emit('submitScore', { roomId: currentRoom, totalScore: myTotalPoints, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
+        } else {
+            const p = { name: myName, score: myTotalPoints, finalScore: myTotalPoints, time: lastTimeInSeconds, answers: playerAnswers };
+            showFinalResults([p], p);
+        }
+    }
 
     socket.on('playerFinishedStatus', (data) => {
         document.getElementById('host-updates').style.display = 'block';
@@ -636,26 +686,10 @@
         if (list) {
             const existingId = "status-" + data.playerName.replace(/\s+/g, '-');
             if (!document.getElementById(existingId)) {
-                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ <strong>${data.playerName}</strong> המתין/ה לתוצאות</div>`;
+                list.innerHTML += `<div id="${existingId}" style="margin-bottom: 5px;">✅ <strong>${data.playerName}</strong> סיים/ה</div>`;
             }
         }
-
-        if (isHost && data.submittedCount < data.totalPlayers) {
-            document.getElementById('force-end-btn').style.display = 'inline-block';
-        }
     });
-
-    function forceEndGame() {
-        if (confirm("האם אתה בטוח שברצונך לסיים את המשחק עבור כולם עכשיו?")) {
-            socket.emit('forceEndGame', { 
-                roomId: currentRoom, 
-                forceHostSubmit: !hasSubmittedCurrentRound, 
-                myTotalScore: myTotalPoints, 
-                myTime: lastTimeInSeconds, 
-                myAnswers: playerAnswers 
-            });
-        }
-    }
 
     socket.on('gameOver', (leaderboard) => {
         let myData = leaderboard.find(p => p.name === myName);
@@ -664,102 +698,11 @@
         showFinalResults(leaderboard, myData);
     });
 
-    async function appealAllWrongAnswers() {
-        if (appealsUsed >= 1) {
-            alert("שחקן יקר, עומדת לרשותך זכות לערעור מרוכז אחד בלבד במשחק זה.");
-            return;
-        }
-        
-        const btnElement = document.getElementById('batch-appeal-btn');
-        if(btnElement) {
-            btnElement.disabled = true;
-            btnElement.innerText = "שולח לשופט ה-AI לבדיקה...";
-        }
-        appealsUsed++;
-        
-        if(isMultiplayerMode) socket.emit('announceAppeal', {roomId: currentRoom, playerName: myName});
-        showNotification("הערעור שלך נשלח לבדיקת ה-AI, נא להמתין...");
-        
-        let itemsToJudge = [];
-        const pointsPerQuestion = activeCategories.length > 0 ? (100 / activeCategories.length) : 0;
-        
-        activeCategories.forEach(cat => {
-            const ans = playerAnswers[cat.label];
-            if (ans && ans.val && ans.val !== "דלג" && ans.val !== "---" && ans.val !== "") {
-                if (Math.abs(ans.points - pointsPerQuestion) > 0.01) { 
-                    itemsToJudge.push({
-                        catId: cat.id,
-                        categoryLabel: cat.label,
-                        answer: ans.val
-                    });
-                }
-            }
-        });
-
-        if (itemsToJudge.length === 0) {
-            alert("אין תשובות שגויות לערער עליהן!");
-            if(btnElement) btnElement.style.display = 'none';
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/ask-judge-batch', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ letter: currentLetter, items: itemsToJudge })
-            });
-            
-            let data = await res.json();
-            
-            // בדיקת שגיאות מהשרת
-            if (data.error) {
-                throw new Error(data.error);
-            }
-            if (!data.results) {
-                throw new Error("תשובת השופט אינה תקינה");
-            }
-            
-            itemsToJudge.forEach(item => {
-                const resItem = data.results[item.catId];
-                if (resItem) {
-                    let newPoints = 0;
-                    if(resItem.points === 10) newPoints = pointsPerQuestion;
-                    else if(resItem.points === 5) newPoints = pointsPerQuestion / 2;
-                    
-                    newPoints = formatScore(newPoints);
-                    playerAnswers[item.categoryLabel].points = newPoints;
-                    playerAnswers[item.categoryLabel].isCorrect = newPoints > 0;
-                    playerAnswers[item.categoryLabel].feedback = resItem.reason || (newPoints > 0 ? "אושר בערעור" : "הערעור נדחה");
-                    
-                    if (Math.abs(newPoints - pointsPerQuestion) < 0.01) {
-                        socket.emit('logApprovedWord', { category: item.catId, word: item.answer });
-                    }
-                }
-            });
-            
-            myTotalPoints = 0;
-            for(let key in playerAnswers){ myTotalPoints += playerAnswers[key].points || 0; }
-            myTotalPoints = formatScore(myTotalPoints);
-            
-            if(btnElement) btnElement.style.display = 'none'; 
-            
-            if(isMultiplayerMode) {
-                socket.emit('submitAppeal', { roomId: currentRoom, playerName: myName, newTotalScore: myTotalPoints, answers: playerAnswers });
-            } else {
-                const p = { name: myName, score: myTotalPoints, finalScore: myTotalPoints, time: lastTimeInSeconds, answers: playerAnswers };
-                showFinalResults([p], p);
-            }
-        } catch(e) {
-            if(btnElement) btnElement.innerText = "שגיאה בחיבור לשופט";
-            showNotification(e.message || "אירעה שגיאה. הניקוד לא השתנה.");
-        }
-    }
-
     socket.on('appealStarted', (playerName) => {
-        showNotification(`השחקן/ית ${playerName} הגיש/ה ערעור לשופט AI, הטבלה תתעדכן בקרוב...`);
-        resetAppealTimer();
+        showNotification(`השחקן/ית ${playerName} ממתין/ה לשופט ה-AI...`);
     });
 
+    // קליטת נתוני המילים המאושרות למסך המנהל
     socket.on('receiveApprovedWords', (data) => {
         const container = document.getElementById('admin-words-container');
         let html = '';
@@ -817,30 +760,6 @@
         return `<td style="vertical-align:middle;"><strong>${ans.val}</strong>${status}</td>`;
     }
 
-    let appealTimerId;
-    function resetAppealTimer() {
-        const timerP = document.getElementById('appeal-timer');
-        const span = document.getElementById('appeal-countdown');
-        let timeLeft = 15;
-        
-        if(timerP) {
-            timerP.style.display = 'block';
-            span.innerText = timeLeft;
-            clearInterval(appealTimerId);
-            
-            appealTimerId = setInterval(() => {
-                timeLeft--;
-                span.innerText = timeLeft;
-                if(timeLeft <= 0) {
-                    clearInterval(appealTimerId);
-                    timerP.style.display = 'none';
-                    const batchBtn = document.getElementById('batch-appeal-btn');
-                    if(batchBtn) batchBtn.style.display = 'none';
-                }
-            }, 1000);
-        }
-    }
-
     function showFinalResults(leaderboard, myData) {
         try {
             showScreen('results');
@@ -867,7 +786,6 @@
                 }
             }
 
-            // השינוי שביקשת להודעה הקולית (לשחקן יחיד לעומת קבוצתי)
             speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "המשחק הסתיים.");
 
             const tbody = document.getElementById('leaderboard-body');
@@ -893,13 +811,8 @@
             }
 
             const comparisonContainer = document.getElementById('answers-comparison-container');
-            const batchAppealContainer = document.getElementById('batch-appeal-container');
-            batchAppealContainer.innerHTML = ''; 
             
             if (comparisonContainer && myData && myData.answers) {
-                let hasWrongAnswers = false;
-                const pointsPerQuestion = activeCategories.length > 0 ? (100 / activeCategories.length) : 0;
-
                 let tableHtml = `
                     <div style="overflow-x: auto; margin-top: 10px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); text-align:center;">
                         <h3 style="color: var(--primary); text-align: right; padding-right: 10px;">
@@ -921,12 +834,6 @@
                 activeCategories.forEach(cat => {
                     let ans = myData.answers[cat.label];
                     
-                    if (ans && ans.val && ans.val !== "דלג" && ans.val !== "---" && ans.val !== "") {
-                        if (Math.abs(ans.points - pointsPerQuestion) > 0.01) {
-                            hasWrongAnswers = true;
-                        }
-                    }
-
                     tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
                     tableHtml += getAnswerCellHtml(ans, cat.label, cat.id, true);
 
@@ -939,14 +846,9 @@
                 });
                 tableHtml += `</tbody></table></div>`;
                 comparisonContainer.innerHTML = tableHtml;
-
-                if (hasWrongAnswers && appealsUsed === 0) {
-                    batchAppealContainer.innerHTML = `<button id="batch-appeal-btn" class="btn-batch-appeal" onclick="appealAllWrongAnswers()">ערער לשופט AI על כל התשובות השגויות</button>`;
-                }
             }
             
             window.finalLeaderboard = leaderboard;
-            resetAppealTimer();
 
         } catch(err) {
             console.error("שגיאה קריטית במסך הסיום:", err);
@@ -955,15 +857,22 @@
 
     function playAgainInSameRoom() {
         if (isMultiplayerMode) {
+            // במולטיפלייר חוזרים ללובי, התיבות ישמרו את מצבן מהטעינה הראשונית
             socket.emit('backToLobby', currentRoom);
         } else {
+            // בשחקן יחיד נטען מחדש, מה שימשוך את השם והתיבות מ-sessionStorage אוטומטית
             location.reload();
         }
     }
 
     socket.on('returnToLobby', (data) => {
         currentLetter = data.letter;
-        disabledCategoriesList = data.disabledCategories || [];
+        // קריאה מ-sessionStorage כדי לשחזר תיבות שנבחרו במולטיפלייר
+        disabledCategoriesList = JSON.parse(sessionStorage.getItem('savedCategories') || '[]');
+        document.querySelectorAll('.cat-disable-cb').forEach(cb => {
+            cb.checked = disabledCategoriesList.includes(cb.value);
+        });
+
         showScreen('lobby');
         updateLobby(data.players);
         
