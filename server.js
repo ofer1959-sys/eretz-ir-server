@@ -22,11 +22,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results: {} });
         }
 
-        // שימוש במצב JSON מובנה כדי להכריח את ה-API להחזיר קוד נקי ולמנוע קריסות
-        const model = genAI.getGenerativeModel({ 
-            model: 'gemini-1.5-flash',
-            generationConfig: { responseMimeType: "application/json" }
-        });
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
         
         let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
 
@@ -42,7 +38,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 רשימת המילים לבדיקה:
 ${promptList}
 
-עליך להחזיר אך ורק מבנה JSON תקין כפי שמוצג בדוגמה הבאה, ללא שום טקסט נוסף:
+עליך להחזיר אך ורק מבנה JSON תקין כפי שמוצג בדוגמה הבאה, ללא שום טקסט נוסף וללא סימוני Markdown:
 {
   "results": {
     "catId_1": { "points": 10, "reason": "תשובה נכונה" },
@@ -53,13 +49,20 @@ ${promptList}
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
         
-        const parsedData = JSON.parse(responseText);
+        // מנגנון חכם לחילוץ ה-JSON גם אם ג'מיני הוסיף טקסט מיותר
+        let jsonString = responseText;
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            jsonString = jsonMatch[0];
+        }
+        
+        const parsedData = JSON.parse(jsonString);
         res.json(parsedData);
     } catch (error) {
         console.error("\n=== שגיאת ג'מיני (Gemini API Error) ===");
         console.error(error);
         console.error("======================================\n");
-        res.status(500).json({ error: "שגיאה בחיבור לשופט" });
+        res.status(500).json({ error: "שגיאה בחיבור לשופט. ייתכן עומס זמני, אנא נסה שוב." });
     }
 });
 
@@ -222,7 +225,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ניהול מילים מאושרות של סבא עופר
+    // אזור איסוף המילים של סבא עופר
     socket.on('logApprovedWord', (data) => {
         if (!aiApprovedWords[data.category]) {
             aiApprovedWords[data.category] = new Set();
