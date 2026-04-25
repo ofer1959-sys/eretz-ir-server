@@ -20,7 +20,8 @@ async function callGeminiAPI(prompt) {
         throw new Error("מפתח ה-API של ג'מיני חסר בשרת.");
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // התיקון: שימוש במודל הגנרי gemini-pro שנתמך תמיד
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -30,10 +31,8 @@ async function callGeminiAPI(prompt) {
         body: JSON.stringify({
             contents: [{
                 parts: [{ text: prompt }]
-            }],
-            generationConfig: {
-                responseMimeType: "application/json" // מבטיח תשובה בקוד נקי
-            }
+            }]
+            // הסרנו את responseMimeType כדי להבטיח תאימות מקסימלית למודל הגנרי
         })
     });
 
