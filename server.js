@@ -62,7 +62,10 @@ ${promptList}
         console.error("\n=== שגיאת ג'מיני (Gemini API Error) ===");
         console.error(error);
         console.error("======================================\n");
-        res.status(500).json({ error: "שגיאה בחיבור לשופט. ייתכן עומס זמני, אנא נסה שוב." });
+        
+        // כאן טמון השינוי: אנחנו שולחים את הודעת השגיאה המדויקת חזרה ללקוח!
+        const errorMessage = error.message || error.toString() || "שגיאה לא ידועה";
+        res.status(500).json({ error: `תקלת שופט: ${errorMessage}` });
     }
 });
 
@@ -225,7 +228,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // אזור איסוף המילים של סבא עופר
     socket.on('logApprovedWord', (data) => {
         if (!aiApprovedWords[data.category]) {
             aiApprovedWords[data.category] = new Set();
