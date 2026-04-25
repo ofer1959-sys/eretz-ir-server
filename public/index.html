@@ -534,7 +534,6 @@
         activeCategories.forEach(cat => {
             const div = document.createElement('div');
             div.className = 'category-row';
-            // הוסר כפתור "דלג", כדי לדלג פשוט משאירים שדה ריק.
             div.innerHTML = `
                 <label>${cat.label}</label>
                 <input type="text" id="input-${cat.id}" placeholder="הכנס מילה ב-${currentLetter}...">
@@ -712,6 +711,14 @@
             
             let data = await res.json();
             
+            // בדיקת שגיאות מהשרת
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            if (!data.results) {
+                throw new Error("תשובת השופט אינה תקינה");
+            }
+            
             itemsToJudge.forEach(item => {
                 const resItem = data.results[item.catId];
                 if (resItem) {
@@ -724,14 +731,12 @@
                     playerAnswers[item.categoryLabel].isCorrect = newPoints > 0;
                     playerAnswers[item.categoryLabel].feedback = resItem.reason || (newPoints > 0 ? "אושר בערעור" : "הערעור נדחה");
                     
-                    // שולח לשרת למאגר *רק* אם הניקוד הוא 100% מושלם
                     if (Math.abs(newPoints - pointsPerQuestion) < 0.01) {
                         socket.emit('logApprovedWord', { category: item.catId, word: item.answer });
                     }
                 }
             });
             
-            // חישוב ציון כולל מחדש אחרי הערעור
             myTotalPoints = 0;
             for(let key in playerAnswers){ myTotalPoints += playerAnswers[key].points || 0; }
             myTotalPoints = formatScore(myTotalPoints);
@@ -746,7 +751,7 @@
             }
         } catch(e) {
             if(btnElement) btnElement.innerText = "שגיאה בחיבור לשופט";
-            showNotification("אירעה שגיאה. הניקוד לא השתנה.");
+            showNotification(e.message || "אירעה שגיאה. הניקוד לא השתנה.");
         }
     }
 
@@ -755,7 +760,6 @@
         resetAppealTimer();
     });
 
-    // קליטת נתוני המילים המאושרות למסך המנהל
     socket.on('receiveApprovedWords', (data) => {
         const container = document.getElementById('admin-words-container');
         let html = '';
@@ -787,7 +791,7 @@
     function clearCategoryWords(categoryId) {
         if (confirm(`האם אתה בטוח שברצונך לרוקן את כל המילים שנאספו בקטגוריה זו?`)) {
             socket.emit('clearCategoryWords', categoryId);
-            setTimeout(() => socket.emit('getApprovedWords'), 300); // רענון תצוגה
+            setTimeout(() => socket.emit('getApprovedWords'), 300); 
         }
     }
 
@@ -863,7 +867,8 @@
                 }
             }
 
-            speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "סיימת את המשחק.");
+            // השינוי שביקשת להודעה הקולית (לשחקן יחיד לעומת קבוצתי)
+            speak(leaderboard.length > 1 ? `המנצח הוא ${winner.name}.` : "המשחק הסתיים.");
 
             const tbody = document.getElementById('leaderboard-body');
             if (tbody) {
