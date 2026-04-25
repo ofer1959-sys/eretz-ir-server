@@ -13,73 +13,85 @@ app.use(express.json());
 const aiApprovedWords = {};
 const rooms = {};
 
-// פונקציה חכמה שמאתרת את המודל הזמין ביותר (ונמנעת ממודלים חסומים בחינם)
-async function callGeminiAPI(prompt) {
+let activeModelName = null;
+
+// ==========================================
+// בוט הגישוש: סורק ובודק איזה מודל פתוח בחינם למפתח שלך
+// ==========================================
+async function initializeGemini() {
     const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
     if (!apiKey) {
-        throw new Error("מפתח ה-API של ג'מיני חסר בשרת.");
+        console.error("❌ מפתח API חסר בשרת!");
+        return;
     }
-
-    const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const modelsRes = await fetch(modelsUrl);
-    const modelsData = await modelsRes.json();
-
-    if (modelsData.error) {
-        throw new Error("שגיאה מול גוגל בבדיקת ההרשאות: " + modelsData.error.message);
-    }
-
-    let selectedModel = ''; 
     
-    if (modelsData.models) {
-        const validModels = modelsData.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'));
+    try {
+        console.log("🔍 מושך רשימת מודלים מגוגל...");
+        const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+        const res = await fetch(modelsUrl);
+        const data = await res.json();
         
-        // רשימת עדיפויות - מודלים חינמיים ויציבים בלבד
-        const preferredModels = [
-            'models/gemini-1.5-flash',
-            'models/gemini-1.0-pro',
-            'models/gemini-pro'
-        ];
+        if (data.error) throw new Error(data.error.message);
         
-        for (let pref of preferredModels) {
-            if (validModels.find(m => m.name === pref)) {
-                selectedModel = pref;
-                break;
+        const validModels = data.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'));
+        
+        console.log("🛠️ מתחיל בבדיקת חינמיות... (מאתר מודל עם מכסה פתוחה)");
+        
+        // סידור הרשימה כדי לנסות קודם את המודלים הקלים (flash)
+        const sortedModels = validModels.sort((a, b) => {
+            if (a.name.includes('flash')) return -1;
+            if (b.name.includes('flash')) return 1;
+            return 0;
+        });
+
+        for (let m of sortedModels) {
+            console.log(`בודק את המודל: ${m.name}...`);
+            const testUrl = `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`;
+            const testRes = await fetch(testUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({contents: [{parts: [{text: "test"}]}]})
+            });
+            
+            const testData = await testRes.json();
+            
+            if (!testData.error) {
+                console.log(`✅ בינגו! המודל ${m.name} פתוח ועובד בחינם.`);
+                activeModelName = m.name.replace('models/', '');
+                return;
+            } else {
+                console.log(`❌ נכשל (${testData.error.message.substring(0, 60)}...)`);
             }
         }
         
-        // אם המועדפים לא נמצאו, ניקח מודל אחר, אבל נסנן את 2.5-pro שחסום בחינם
-        if (!selectedModel) {
-            const fallback = validModels.find(m => !m.name.includes('2.5'));
-            selectedModel = fallback ? fallback.name : validModels[0].name;
-        }
+        console.error("\n⛔ שגיאה קריטית: אף מודל לא פתוח לשימוש במפתח שלך (המכסה היא 0).");
+        console.error("עליך לייצר מפתח חדש ב-Google AI Studio תחת *פרויקט חדש לגמרי*.\n");
         
-    } else {
-        throw new Error("לא התקבלה רשימת מודלים מגוגל.");
+    } catch (error) {
+        console.error("❌ שגיאה באתחול מול גוגל:", error.message);
     }
+}
 
-    console.log(`🤖 השופט משתמש כעת במודל: ${selectedModel}`);
+// מפעיל את הגישוש מיד כשהשרת נדלק
+initializeGemini();
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
+async function callGeminiAPI(prompt) {
+    const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
+    if (!apiKey) throw new Error("מפתח API חסר");
+    if (!activeModelName) throw new Error("כל המודלים במפתח שלך נחסמו עקב מכסה של 0. עליך לייצר מפתח API חדש מול גוגל.");
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModelName}:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
-        })
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
 
     const data = await response.json();
 
-    if (data.error) {
-        throw new Error(data.error.message || "שגיאה בעיבוד התשובה");
-    }
-
-    if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts) {
-        throw new Error("השופט החזיר תשובה ריקה.");
-    }
+    if (data.error) throw new Error(data.error.message);
+    if (!data.candidates || !data.candidates[0].content) throw new Error("תשובה ריקה מג'מיני");
 
     return data.candidates[0].content.parts[0].text;
 }
@@ -117,18 +129,15 @@ ${promptList}
         
         let jsonString = responseText;
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            jsonString = jsonMatch[0];
-        }
+        if (jsonMatch) jsonString = jsonMatch[0];
         
         const parsedData = JSON.parse(jsonString);
         res.json(parsedData);
     } catch (error) {
-        console.error("\n=== שגיאת תקשורת מול ג'מיני ===");
+        console.error("\n=== שגיאת תקשורת מול השופט ===");
         console.error(error);
         console.error("================================\n");
-        const errorMessage = error.message || error.toString() || "שגיאה לא ידועה";
-        res.status(500).json({ error: `תקלת שופט: ${errorMessage}` });
+        res.status(500).json({ error: error.message || "שגיאה לא ידועה" });
     }
 });
 
