@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,9 +10,48 @@ const io = new Server(server);
 app.use(express.static('public'));
 app.use(express.json());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const aiApprovedWords = {};
 const rooms = {};
+
+// ==========================================
+// פונקציה לתקשורת ישירה מול ה-API של ג'מיני (ללא ספרייה חיצונית)
+// ==========================================
+async function callGeminiAPI(prompt) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("מפתח ה-API של ג'מיני חסר בשרת (GEMINI_API_KEY).");
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            contents: [{
+                parts: [{ text: prompt }]
+            }],
+            generationConfig: {
+                responseMimeType: "application/json" // מכריח אותו להחזיר קוד JSON נקי
+            }
+        })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        throw new Error(data.error.message || "שגיאה לא ידועה מהשרת של גוגל");
+    }
+
+    if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts) {
+        throw new Error("התקבלה תשובה ריקה או לא תקינה מג'מיני.");
+    }
+
+    return data.candidates[0].content.parts[0].text;
+}
+
 
 app.post('/api/ask-judge-batch', async (req, res) => {
     try {
@@ -22,9 +60,6 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results: {} });
         }
 
-        // שינוי למודל הקלאסי והיציב שנתמך בכל הגרסאות בשרת
-        const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-        
         let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
 
         const prompt = `
@@ -47,10 +82,9 @@ ${promptList}
   }
 }`;
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        // קריאה ישירה לשרתים של גוגל
+        const responseText = await callGeminiAPI(prompt);
         
-        // מנגנון חכם לחילוץ ה-JSON גם אם ג'מיני הוסיף טקסט מיותר
         let jsonString = responseText;
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -60,9 +94,9 @@ ${promptList}
         const parsedData = JSON.parse(jsonString);
         res.json(parsedData);
     } catch (error) {
-        console.error("\n=== שגיאת ג'מיני (Gemini API Error) ===");
+        console.error("\n=== שגיאת תקשורת ישירה מול ג'מיני ===");
         console.error(error);
-        console.error("======================================\n");
+        console.error("=========================================\n");
         
         const errorMessage = error.message || error.toString() || "שגיאה לא ידועה";
         res.status(500).json({ error: `תקלת שופט: ${errorMessage}` });
