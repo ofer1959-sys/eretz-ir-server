@@ -13,70 +13,14 @@ app.use(express.json());
 const aiApprovedWords = {};
 const rooms = {};
 
-// משתנה שיחזיק את המודל שהמערכת מצאה שפתוח עבורך
-let activeModelName = "gemini-1.5-flash"; 
-
-// ==========================================
-// מנגנון גילוי אוטומטי של מודלים (מונע שגיאות 404)
-// ==========================================
-async function discoverAvailableModel() {
-    // ניקוי רווחים מיותרים מהמפתח שמוזן ב-Render (גורם נפוץ לשגיאות)
-    const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
-    
-    if (!apiKey) {
-        console.error("❌ לא נמצא מפתח API של ג'מיני במשתני הסביבה!");
-        return;
-    }
-
-    try {
-        console.log("🔍 בודק אילו מודלים פתוחים עבור מפתח ה-API שלך...");
-        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.error) {
-            console.error("❌ שגיאה מהשרת של גוגל לגבי המפתח שלך:", data.error.message);
-            return;
-        }
-
-        if (data.models) {
-            const modelNames = data.models.map(m => m.name);
-            console.log("✅ המודלים הזמינים למפתח שלך הם:");
-            console.log(modelNames.join(', '));
-
-            // בחירת המודל החכם ביותר שקיים ברשימה המורשית שלך
-            if (modelNames.includes('models/gemini-1.5-flash')) {
-                activeModelName = 'gemini-1.5-flash';
-            } else if (modelNames.includes('models/gemini-1.5-pro')) {
-                activeModelName = 'gemini-1.5-pro';
-            } else if (modelNames.includes('models/gemini-1.0-pro')) {
-                activeModelName = 'gemini-1.0-pro';
-            } else if (modelNames.includes('models/gemini-pro')) {
-                activeModelName = 'gemini-pro';
-            } else if (modelNames.length > 0) {
-                // לוקח את המודל הראשון ברשימה אם המוכרים לא נמצאו
-                activeModelName = modelNames[0].replace('models/', '');
-            }
-            console.log(`🎯 המודל שנבחר אוטומטית למשחק הוא: ${activeModelName}`);
-        }
-    } catch (error) {
-        console.error("❌ שגיאה במהלך איתור המודלים:", error.message);
-    }
-}
-
-// קריאה לפונקציה מיד עם עליית השרת
-discoverAvailableModel();
-
-// ==========================================
-// תקשורת ישירה מול השופט
-// ==========================================
+// פונקציה לתקשורת ישירה מול ה-API של ג'מיני
 async function callGeminiAPI(prompt) {
-    const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        throw new Error("מפתח ה-API חסר בשרת.");
+        throw new Error("מפתח ה-API של ג'מיני חסר בשרת.");
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModelName}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -84,14 +28,16 @@ async function callGeminiAPI(prompt) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }]
+            contents: [{
+                parts: [{ text: prompt }]
+            }]
         })
     });
 
     const data = await response.json();
 
     if (data.error) {
-        throw new Error(data.error.message || "שגיאה לא ידועה מהשרת של גוגל");
+        throw new Error(data.error.message || "שגיאה מהשרת של גוגל");
     }
 
     if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts) {
@@ -276,22 +222,6 @@ io.on('connection', (socket) => {
             });
             processAndSendResults(data.roomId);
         }
-    });
-
-    socket.on('announceAppeal', (data) => {
-        io.to(data.roomId).emit('appealStarted', data.playerName);
-    });
-
-    socket.on('submitAppeal', (data) => {
-        const room = rooms[data.roomId];
-        if (!room) return;
-        
-        let sub = room.submissions.find(s => s.name === data.playerName);
-        if (sub) {
-            sub.score = data.newTotalScore;
-            sub.answers = data.answers;
-        }
-        processAndSendResults(data.roomId);
     });
 
     socket.on('backToLobby', (roomId) => {
