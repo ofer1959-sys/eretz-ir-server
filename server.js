@@ -22,7 +22,8 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results: {} });
         }
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        // שינוי למודל הקלאסי והיציב שנתמך בכל הגרסאות בשרת
+        const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
         
         let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
 
@@ -63,7 +64,6 @@ ${promptList}
         console.error(error);
         console.error("======================================\n");
         
-        // כאן טמון השינוי: אנחנו שולחים את הודעת השגיאה המדויקת חזרה ללקוח!
         const errorMessage = error.message || error.toString() || "שגיאה לא ידועה";
         res.status(500).json({ error: `תקלת שופט: ${errorMessage}` });
     }
