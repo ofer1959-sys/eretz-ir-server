@@ -13,17 +13,14 @@ app.use(express.json());
 const aiApprovedWords = {};
 const rooms = {};
 
-// ==========================================
-// פונקציה לתקשורת ישירה מול ה-API של ג'מיני (ללא ספרייה חיצונית)
-// ==========================================
+// פונקציה לתקשורת ישירה מול ה-API של ג'מיני
 async function callGeminiAPI(prompt) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-        throw new Error("מפתח ה-API של ג'מיני חסר בשרת (GEMINI_API_KEY).");
+        throw new Error("מפתח ה-API של ג'מיני חסר בשרת.");
     }
 
-    // התיקון: שימוש במודל gemini-1.0-pro היציב והפתוח לכל המפתחות
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -33,9 +30,10 @@ async function callGeminiAPI(prompt) {
         body: JSON.stringify({
             contents: [{
                 parts: [{ text: prompt }]
-            }]
-            // הערה: הסרנו את ה-responseMimeType כי הוא נתמך רק בחלק מהמודלים
-            // "צייד ה-JSON" שלנו יחלץ את התשובה בכל מקרה.
+            }],
+            generationConfig: {
+                responseMimeType: "application/json" // מבטיח תשובה בקוד נקי
+            }
         })
     });
 
@@ -46,12 +44,11 @@ async function callGeminiAPI(prompt) {
     }
 
     if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts) {
-        throw new Error("התקבלה תשובה ריקה או לא תקינה מג'מיני.");
+        throw new Error("התקבלה תשובה ריקה מג'מיני.");
     }
 
     return data.candidates[0].content.parts[0].text;
 }
-
 
 app.post('/api/ask-judge-batch', async (req, res) => {
     try {
@@ -74,7 +71,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 רשימת המילים לבדיקה:
 ${promptList}
 
-עליך להחזיר אך ורק מבנה JSON תקין כפי שמוצג בדוגמה הבאה, ללא שום טקסט נוסף וללא סימוני Markdown:
+עליך להחזיר אך ורק מבנה JSON תקין כפי שמוצג בדוגמה הבאה, ללא שום טקסט נוסף:
 {
   "results": {
     "catId_1": { "points": 10, "reason": "תשובה נכונה" },
@@ -82,7 +79,6 @@ ${promptList}
   }
 }`;
 
-        // קריאה ישירה לשרתים של גוגל
         const responseText = await callGeminiAPI(prompt);
         
         let jsonString = responseText;
@@ -94,9 +90,9 @@ ${promptList}
         const parsedData = JSON.parse(jsonString);
         res.json(parsedData);
     } catch (error) {
-        console.error("\n=== שגיאת תקשורת ישירה מול ג'מיני ===");
+        console.error("\n=== שגיאת תקשורת מול ג'מיני ===");
         console.error(error);
-        console.error("=========================================\n");
+        console.error("================================\n");
         
         const errorMessage = error.message || error.toString() || "שגיאה לא ידועה";
         res.status(500).json({ error: `תקלת שופט: ${errorMessage}` });
