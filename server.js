@@ -13,14 +13,48 @@ app.use(express.json());
 const aiApprovedWords = {};
 const rooms = {};
 
-// פונקציה לתקשורת ישירה מול ה-API של ג'מיני
+// פונקציה חכמה שמאתרת את המודל הזמין ביותר למפתח שלך ופונה אליו ישירות
 async function callGeminiAPI(prompt) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
     if (!apiKey) {
         throw new Error("מפתח ה-API של ג'מיני חסר בשרת.");
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+    // שלב 1: משיכת הרשימה של כל המודלים שפתוחים עבור המפתח הזה ספציפית
+    const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const modelsRes = await fetch(modelsUrl);
+    const modelsData = await modelsRes.json();
+
+    if (modelsData.error) {
+        throw new Error("שגיאה מול גוגל בבדיקת ההרשאות: " + modelsData.error.message);
+    }
+
+    let selectedModel = ''; 
+    
+    if (modelsData.models) {
+        // מחפשים רק מודלים של שפה שיודעים לייצר תוכן
+        const validModels = modelsData.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'));
+        
+        const flashModel = validModels.find(m => m.name.includes('gemini-1.5-flash'));
+        const proModel = validModels.find(m => m.name.includes('pro'));
+        
+        if (flashModel) {
+            selectedModel = flashModel.name; 
+        } else if (proModel) {
+            selectedModel = proModel.name;
+        } else if (validModels.length > 0) {
+            selectedModel = validModels[0].name; // לוקח את הראשון שעובד אם השאר חסומים
+        } else {
+            throw new Error("מפתח זה אינו מורשה להפעיל מודלים של טקסט.");
+        }
+    } else {
+        throw new Error("לא התקבלה רשימת מודלים מגוגל.");
+    }
+
+    console.log(`🤖 השופט משתמש כעת במודל: ${selectedModel}`);
+
+    // שלב 2: שולחים את המילים לבדיקה למודל שאותר
+    const url = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -28,20 +62,18 @@ async function callGeminiAPI(prompt) {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            contents: [{
-                parts: [{ text: prompt }]
-            }]
+            contents: [{ parts: [{ text: prompt }] }]
         })
     });
 
     const data = await response.json();
 
     if (data.error) {
-        throw new Error(data.error.message || "שגיאה מהשרת של גוגל");
+        throw new Error(data.error.message || "שגיאה בעיבוד התשובה");
     }
 
     if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts) {
-        throw new Error("התקבלה תשובה ריקה מג'מיני.");
+        throw new Error("השופט החזיר תשובה ריקה.");
     }
 
     return data.candidates[0].content.parts[0].text;
@@ -222,6 +254,23 @@ io.on('connection', (socket) => {
             });
             processAndSendResults(data.roomId);
         }
+    });
+
+    // האירוע הזה משמש עכשיו את האפליקציה כדי להודיע לשאר השחקנים שמתבצעת בדיקת AI אוטומטית ברקע
+    socket.on('announceAppeal', (data) => {
+        io.to(data.roomId).emit('appealStarted', data.playerName);
+    });
+
+    socket.on('submitAppeal', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        
+        let sub = room.submissions.find(s => s.name === data.playerName);
+        if (sub) {
+            sub.score = data.newTotalScore;
+            sub.answers = data.answers;
+        }
+        processAndSendResults(data.roomId);
     });
 
     socket.on('backToLobby', (roomId) => {
