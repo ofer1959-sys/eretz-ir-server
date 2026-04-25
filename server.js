@@ -1,179 +1,317 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
-const cors = require('cors');
-
-process.on('uncaughtException', (err) => console.error('Uncaught:', err));
-process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server);
 
-app.use(cors());
+// הגדרת תיקיית public עבור קובצי ה-HTML/JS
+app.use(express.static('public'));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
-const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
+// אתחול ג'מיני
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// מאגר לשמירת מילים שאושרו ע"י ה-AI (עבור סבא עופר)
+const aiApprovedWords = {};
 const rooms = {};
 
-async function askGeminiDirectly(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }]
-        })
-    });
-
-    if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`HTTP Error ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (data && data.candidates && data.candidates.length > 0) {
-        return data.candidates[0].content.parts[0].text;
-    } else {
-        throw new Error("No valid response");
-    }
-}
-
+// ==========================================
+// נתיב API לבדיקת מילים מול השופט ג'מיני
+// ==========================================
 app.post('/api/ask-judge-batch', async (req, res) => {
-    const { letter, items } = req.body;
-    
-    if (apiKey === "MISSING_KEY") {
-        let results = {};
-        items.forEach(i => { results[i.catId] = { points: 5, reason: "חסר מפתח API" }; });
-        return res.json({ results });
-    }
-
     try {
-        const prompt = `אתה שופט "ארץ עיר". האות: "${letter}". בדוק את התשובות הבאות:
-        ${items.map(i => `- מזהה: "${i.catId}", קטגוריה: "${i.categoryLabel}", תשובה: "${i.answer}"`).join('\n')}
-
-        כללים:
-        1. חייב להתחיל ב-"${letter}".
-        2. התעלם מרווחים ו-א/י/ו/ה. 
-        3. 10 נק' לתקין, 5 נק' לכמעט/סלנג, 0 לשגוי.
-        4. הסבר (reason) עד 12 מילים בלבד! אם 10 נק', כתוב "אושר".
-
-        החזר אך ורק JSON במבנה:
-        {"results": {"מזהה": {"points": 10/5/0, "reason": "הסבר"}}} `;
-        
-        let isResolved = false;
-        // הגדלנו את זמן ההמתנה ל-25 שניות כדי למנוע הודעות "עומס ברשת"
-        const timeout = new Promise((resolve) => setTimeout(() => {
-            if (!isResolved) resolve({ timeout: true });
-        }, 25000));
-        
-        const result = askGeminiDirectly(prompt).then(text => {
-            isResolved = true; 
-            return { text: text };
-        }).catch(e => {
-            isResolved = true; 
-            return { error: true }; 
-        });
-        
-        const response = await Promise.race([result, timeout]);
-        
-        if (response.timeout || response.error) {
-            let results = {};
-            items.forEach(i => { results[i.catId] = { points: 5, reason: "עומס זמני - אושר חלקית" }; });
-            return res.json({ results });
+        const { letter, items } = req.body;
+        if (!items || items.length === 0) {
+            return res.json({ results: {} });
         }
 
-        let cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
-        res.json(JSON.parse(cleanText));
-    } catch (e) {
-        let results = {};
-        items.forEach(i => { results[i.catId] = { points: 5, reason: "שגיאת עיבוד - אושר חלקית" }; });
-        res.json({ results });
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        
+        let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
+
+        const prompt = `
+אתה שופט במשחק 'ארץ עיר' בעברית. בדוק את המילים הבאות שמתחילות באות '${letter}'.
+חוקים:
+1. המילה חייבת להיות קיימת בעברית (או שם לועזי מקובל מאוד בעברית).
+2. קבל שגיאות כתיב קלות אם הכוונה ברורה, אבל הורד את הניקוד ל-5.
+3. התעלם מה' הידיעה בתחילת מילה.
+4. אם המילה נכונה ותקינה, הניקוד הוא 10.
+5. אם המילה אינה קשורה לקטגוריה, אינה קיימת, או אינה באות הנכונה, הניקוד הוא 0.
+
+רשימת המילים לבדיקה:
+${promptList}
+
+עליך להחזיר אך ורק פורמט JSON תקין במבנה הבא (ללא טקסט נוסף):
+{
+  "results": {
+    "catId_1": { "points": 10, "reason": "תשובה נכונה" },
+    "catId_2": { "points": 5, "reason": "שגיאת כתיב קלה" },
+    "catId_3": { "points": 0, "reason": "לא מתחיל באות הנכונה או לא קשור" }
+  }
+}`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+        
+        // ניקוי טקסט מג'מיני כדי להשאיר רק JSON
+        const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsedData = JSON.parse(cleanJson);
+        
+        res.json(parsedData);
+    } catch (error) {
+        console.error("Gemini API Error:", error);
+        res.status(500).json({ error: "שגיאה בחיבור לשופט" });
     }
 });
 
-function calculateAndSendResults(roomId) {
-    const room = rooms[roomId];
-    if (!room) return;
-    const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
-    room.players.forEach(p => {
-        let score = p.baseScore || 0; 
-        if (minTime > 0 && minTime !== Infinity && p.time < 999) {
-            const excessRatio = (p.time - minTime) / minTime;
-            if (excessRatio > 0.50) {
-                const penalties = Math.floor(excessRatio / 0.10);
-                score -= (penalties * 5);
-            }
-        }
-        p.finalScore = Number(Math.max(0, score).toFixed(2));
-    });
-    room.players.sort((a, b) => (b.finalScore - a.finalScore) || (a.time - b.time));
-    io.to(roomId).emit('gameOver', room.players);
-}
-
+// ==========================================
+// ניהול סוקטים - חדרים, שחקנים וניהול מאגרים
+// ==========================================
 io.on('connection', (socket) => {
+
     socket.on('createRoom', (data) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
-        const gameLetter = letters[Math.floor(Math.random() * letters.length)];
-        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false, disabledCategories: data.disabledCategories || [] };
+        const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+        
+        rooms[roomId] = {
+            host: socket.id,
+            hostName: data.hostName,
+            letter: randomLetter,
+            disabledCategories: data.disabledCategories || [],
+            players: [{ socketId: socket.id, name: data.hostName, isHost: true }],
+            submissions: []
+        };
+        
         socket.join(roomId);
-        rooms[roomId].players.push({ id: socket.id, name: data.hostName, isHost: true, hasSubmitted: false });
-        socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players, disabledCategories: rooms[roomId].disabledCategories });
+        socket.emit('roomCreated', { 
+            roomId, 
+            letter: randomLetter, 
+            disabledCategories: rooms[roomId].disabledCategories,
+            players: rooms[roomId].players 
+        });
     });
 
-    socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
-        let room = rooms[roomId];
-        if (!room) return;
-        const existingPlayer = room.players.find(p => p.name === playerName);
-        if (existingPlayer) { existingPlayer.id = socket.id; if (isHostClaim) existingPlayer.isHost = true; }
-        else { room.players.push({ id: socket.id, name: playerName, isHost: false, hasSubmitted: false }); }
+    socket.on('joinRoom', (data) => {
+        const { roomId, playerName, isHostClaim } = data;
+        const room = rooms[roomId];
+        
+        if (!room) {
+            socket.emit('gameError', 'החדר לא קיים או שנסגר.');
+            return;
+        }
+        
+        const existingPlayer = room.players.find(p => p.socketId === socket.id || p.name === playerName);
+        let isHost = false;
+        
+        if (existingPlayer) {
+            existingPlayer.socketId = socket.id;
+            isHost = existingPlayer.isHost;
+        } else {
+            isHost = isHostClaim && room.host === socket.id;
+            room.players.push({ socketId: socket.id, name: playerName, isHost });
+        }
+        
         socket.join(roomId);
-        const myPlayer = room.players.find(p => p.name === playerName);
-        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost, disabledCategories: room.disabledCategories });
+        socket.emit('roomJoined', { 
+            roomId, 
+            letter: room.letter,
+            disabledCategories: room.disabledCategories,
+            isHost 
+        });
         io.to(roomId).emit('updatePlayers', room.players);
     });
 
     socket.on('startGame', (data) => {
         const room = rooms[data.roomId];
-        if(room) { room.gameStarted = true; io.to(data.roomId).emit('gameStarted', { letter: room.letter, disabledCategories: room.disabledCategories }); }
-    });
-
-    socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
-        const room = rooms[roomId];
-        if (!room) return;
-        const player = room.players.find(p => p.id === socket.id);
-        if (player && !player.hasSubmitted) {
-            player.baseScore = totalScore; player.time = timeInSeconds; player.answers = answers; player.hasSubmitted = true;
-            room.submittedCount++;
-            if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
+        if (room && room.host === socket.id) {
+            room.submissions = [];
+            io.to(data.roomId).emit('gameStarted', { 
+                letter: room.letter,
+                disabledCategories: room.disabledCategories
+            });
         }
     });
 
-    socket.on('submitAppeal', ({ roomId, playerName, newTotalScore, answers }) => {
-        const room = rooms[roomId];
-        if (!room) return;
-        const player = room.players.find(p => p.name === playerName);
-        if (player) { player.baseScore = newTotalScore; player.answers = answers; calculateAndSendResults(roomId); }
+    socket.on('announceFinish', (data) => {
+        socket.to(data.roomId).emit('playerAnnouncedFinish', data.playerName);
     });
 
-    socket.on('announceAppeal', ({ roomId, playerName }) => { io.to(roomId).emit('appealStarted', playerName); });
+    socket.on('submitScore', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+
+        const player = room.players.find(p => p.socketId === socket.id);
+        if (!player) return;
+
+        const existingSub = room.submissions.find(s => s.name === player.name);
+        if (!existingSub) {
+            room.submissions.push({
+                name: player.name,
+                score: data.totalScore,
+                time: data.timeInSeconds,
+                answers: data.answers
+            });
+        }
+
+        const waitingFor = room.players.filter(p => !room.submissions.find(s => s.name === p.name)).map(p => p.name);
+
+        io.to(data.roomId).emit('playerFinishedStatus', {
+            playerName: player.name,
+            submittedCount: room.submissions.length,
+            totalPlayers: room.players.length,
+            waitingFor
+        });
+
+        if (room.submissions.length >= room.players.length) {
+            processAndSendResults(data.roomId);
+        }
+    });
+
+    socket.on('forceEndGame', (data) => {
+        const room = rooms[data.roomId];
+        if (room && room.host === socket.id) {
+            if (data.forceHostSubmit) {
+                const player = room.players.find(p => p.socketId === socket.id);
+                if (player && !room.submissions.find(s => s.name === player.name)) {
+                    room.submissions.push({
+                        name: player.name,
+                        score: data.myTotalScore,
+                        time: data.myTime,
+                        answers: data.myAnswers
+                    });
+                }
+            }
+            
+            room.players.forEach(p => {
+                if (!room.submissions.find(s => s.name === p.name)) {
+                    room.submissions.push({
+                        name: p.name,
+                        score: 0,
+                        time: 999,
+                        answers: {}
+                    });
+                }
+            });
+            processAndSendResults(data.roomId);
+        }
+    });
+
+    socket.on('announceAppeal', (data) => {
+        io.to(data.roomId).emit('appealStarted', data.playerName);
+    });
+
+    socket.on('submitAppeal', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        
+        let sub = room.submissions.find(s => s.name === data.playerName);
+        if (sub) {
+            sub.score = data.newTotalScore;
+            sub.answers = data.answers;
+        }
+        processAndSendResults(data.roomId);
+    });
 
     socket.on('backToLobby', (roomId) => {
         const room = rooms[roomId];
-        if (room) {
-            room.gameStarted = false; room.submittedCount = 0;
+        if (room && room.host === socket.id) {
+            room.submissions = [];
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
-            room.players.forEach(p => { p.hasSubmitted = false; p.baseScore = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
-            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players, disabledCategories: room.disabledCategories });
+            io.to(roomId).emit('returnToLobby', { 
+                letter: room.letter, 
+                players: room.players,
+                disabledCategories: room.disabledCategories
+            });
+        }
+    });
+
+    // ==========================================
+    // אזור איסוף המילים של סבא עופר
+    // ==========================================
+    socket.on('logApprovedWord', (data) => {
+        if (!aiApprovedWords[data.category]) {
+            aiApprovedWords[data.category] = new Set();
+        }
+        aiApprovedWords[data.category].add(data.word);
+    });
+
+    socket.on('getApprovedWords', () => {
+        const formatted = {};
+        for (let cat in aiApprovedWords) {
+            formatted[cat] = Array.from(aiApprovedWords[cat]);
+        }
+        socket.emit('receiveApprovedWords', formatted);
+    });
+
+    socket.on('clearCategoryWords', (category) => {
+        if (aiApprovedWords[category]) {
+            aiApprovedWords[category].clear();
+        }
+    });
+
+    socket.on('disconnect', () => {
+        for (let roomId in rooms) {
+            const room = rooms[roomId];
+            const pIndex = room.players.findIndex(p => p.socketId === socket.id);
+            if (pIndex !== -1) {
+                const isHost = room.players[pIndex].isHost;
+                room.players.splice(pIndex, 1);
+                io.to(roomId).emit('updatePlayers', room.players);
+                
+                if (room.players.length === 0) {
+                    delete rooms[roomId];
+                } else if (isHost) {
+                    room.players[0].isHost = true;
+                    room.host = room.players[0].socketId;
+                    io.to(room.players[0].socketId).emit('roomJoined', { 
+                        roomId, 
+                        letter: room.letter, 
+                        disabledCategories: room.disabledCategories,
+                        isHost: true 
+                    });
+                    io.to(roomId).emit('updatePlayers', room.players);
+                }
+            }
         }
     });
 });
 
+function processAndSendResults(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    let validSubmissions = room.submissions.filter(s => s.time !== 999);
+    let bestTime = validSubmissions.length > 0 ? Math.min(...validSubmissions.map(s => s.time)) : 0;
+
+    const leaderboard = room.submissions.map(sub => {
+        let penalty = 0;
+        if (sub.time !== 999 && bestTime > 0) {
+            let threshold = bestTime * 1.5;
+            if (sub.time > threshold) {
+                let extraTime = sub.time - threshold;
+                let penaltySteps = Math.ceil(extraTime / (bestTime * 0.1));
+                penalty = penaltySteps * 5;
+            }
+        }
+        let finalScore = Math.max(0, sub.score - penalty);
+        return { ...sub, finalScore, penalty };
+    });
+
+    leaderboard.sort((a, b) => {
+        if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+        return a.time - b.time;
+    });
+
+    io.to(roomId).emit('gameOver', leaderboard);
+}
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log('Server Live'));
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
