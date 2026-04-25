@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const fs = require('fs'); // ספרייה לניהול קבצים (קריאה וכתיבה)
 
 const app = express();
 const server = http.createServer(app);
@@ -10,14 +11,43 @@ const io = new Server(server);
 app.use(express.static('public'));
 app.use(express.json());
 
-const aiApprovedWords = {};
+const DB_FILE = 'approved_words.json'; // שם הקובץ שבו יישמרו המילים
+let aiApprovedWords = {};
 const rooms = {};
+
+// ==========================================
+// מנגנון שמירה וטעינה של המילים מהקובץ
+// ==========================================
+// טעינת המילים הקיימות כשהשרת עולה
+if (fs.existsSync(DB_FILE)) {
+    try {
+        const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        for (let cat in data) {
+            aiApprovedWords[cat] = new Set(data[cat]);
+        }
+        console.log("✅ מאגר המילים שוחזר בהצלחה מהקובץ.");
+    } catch (e) {
+        console.error("❌ שגיאה בקריאת קובץ המילים:", e.message);
+    }
+}
+
+// פונקציה לשמירת המילים לקובץ בכל פעם שיש עדכון
+function saveWordsToFile() {
+    try {
+        const dataToSave = {};
+        for (let cat in aiApprovedWords) {
+            dataToSave[cat] = Array.from(aiApprovedWords[cat]);
+        }
+        fs.writeFileSync(DB_FILE, JSON.stringify(dataToSave), 'utf8');
+    } catch (e) {
+        console.error("❌ שגיאה בשמירת המילים לקובץ:", e.message);
+    }
+}
+
+// ==========================================
 
 let activeModelName = null;
 
-// ==========================================
-// בוט הגישוש: סורק ובודק איזה מודל פתוח בחינם למפתח שלך
-// ==========================================
 async function initializeGemini() {
     const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
     if (!apiKey) {
@@ -37,7 +67,6 @@ async function initializeGemini() {
         
         console.log("🛠️ מתחיל בבדיקת חינמיות... (מאתר מודל עם מכסה פתוחה)");
         
-        // סידור הרשימה כדי לנסות קודם את המודלים הקלים (flash)
         const sortedModels = validModels.sort((a, b) => {
             if (a.name.includes('flash')) return -1;
             if (b.name.includes('flash')) return 1;
@@ -72,7 +101,6 @@ async function initializeGemini() {
     }
 }
 
-// מפעיל את הגישוש מיד כשהשרת נדלק
 initializeGemini();
 
 async function callGeminiAPI(prompt) {
@@ -300,11 +328,13 @@ io.on('connection', (socket) => {
         }
     });
 
+    // === עדכון: שמירת מילים לקובץ ===
     socket.on('logApprovedWord', (data) => {
         if (!aiApprovedWords[data.category]) {
             aiApprovedWords[data.category] = new Set();
         }
         aiApprovedWords[data.category].add(data.word);
+        saveWordsToFile(); // שמירה לקובץ
     });
 
     socket.on('getApprovedWords', () => {
@@ -318,6 +348,7 @@ io.on('connection', (socket) => {
     socket.on('clearCategoryWords', (category) => {
         if (aiApprovedWords[category]) {
             aiApprovedWords[category].clear();
+            saveWordsToFile(); // עדכון הקובץ (מחיקה)
         }
     });
 
