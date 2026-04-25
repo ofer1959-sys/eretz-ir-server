@@ -8,20 +8,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// הגדרת תיקיית public עבור קובצי ה-HTML/JS
 app.use(express.static('public'));
 app.use(express.json());
 
-// אתחול ג'מיני
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// מאגר לשמירת מילים שאושרו ע"י ה-AI (עבור סבא עופר)
 const aiApprovedWords = {};
 const rooms = {};
 
-// ==========================================
-// נתיב API לבדיקת מילים מול השופט ג'מיני
-// ==========================================
 app.post('/api/ask-judge-batch', async (req, res) => {
     try {
         const { letter, items } = req.body;
@@ -29,7 +22,11 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results: {} });
         }
 
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        // שימוש במצב JSON מובנה כדי להכריח את ה-API להחזיר קוד נקי ולמנוע קריסות
+        const model = genAI.getGenerativeModel({ 
+            model: 'gemini-1.5-flash',
+            generationConfig: { responseMimeType: "application/json" }
+        });
         
         let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
 
@@ -45,34 +42,28 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 רשימת המילים לבדיקה:
 ${promptList}
 
-עליך להחזיר אך ורק פורמט JSON תקין במבנה הבא (ללא טקסט נוסף):
+עליך להחזיר אך ורק מבנה JSON תקין כפי שמוצג בדוגמה הבאה, ללא שום טקסט נוסף:
 {
   "results": {
     "catId_1": { "points": 10, "reason": "תשובה נכונה" },
-    "catId_2": { "points": 5, "reason": "שגיאת כתיב קלה" },
-    "catId_3": { "points": 0, "reason": "לא מתחיל באות הנכונה או לא קשור" }
+    "catId_2": { "points": 5, "reason": "שגיאת כתיב קלה" }
   }
 }`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
         
-        // ניקוי טקסט מג'מיני כדי להשאיר רק JSON
-        const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsedData = JSON.parse(cleanJson);
-        
+        const parsedData = JSON.parse(responseText);
         res.json(parsedData);
     } catch (error) {
-        console.error("Gemini API Error:", error);
+        console.error("\n=== שגיאת ג'מיני (Gemini API Error) ===");
+        console.error(error);
+        console.error("======================================\n");
         res.status(500).json({ error: "שגיאה בחיבור לשופט" });
     }
 });
 
-// ==========================================
-// ניהול סוקטים - חדרים, שחקנים וניהול מאגרים
-// ==========================================
 io.on('connection', (socket) => {
-
     socket.on('createRoom', (data) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
@@ -231,9 +222,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ==========================================
-    // אזור איסוף המילים של סבא עופר
-    // ==========================================
+    // ניהול מילים מאושרות של סבא עופר
     socket.on('logApprovedWord', (data) => {
         if (!aiApprovedWords[data.category]) {
             aiApprovedWords[data.category] = new Set();
