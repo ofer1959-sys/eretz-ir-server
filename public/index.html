@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ארץ עיר של סבא עופר</title>
+    <title>ארץ עיר של סבא עופר- שיפוט AI</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         :root { --primary: #4a90e2; --secondary: #f5a623; --success: #7ed321; --danger: #d0021b; --bg: #f0f4f8; --text: #333; }
@@ -57,7 +57,7 @@
 
 <div class="container">
     <div id="welcome" class="screen active">
-        <h1 id="welcome-h1">ארץ עיר של סבא עופר <span class="version-badge">גרסה מרושתת</span></h1>
+        <h1 id="welcome-h1">ארץ עיר של סבא עופר- שיפוט AI</h1>
         
         <div id="join-section" style="display:none; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
             <p style="font-size: 0.9rem; color:#666;">קיבלת קוד ממשתתף אחר?</p>
@@ -267,8 +267,10 @@
     let timerInterval;
     let playerAnswers = {};
     let isMultiplayerMode = false;
+    let hasSubmittedCurrentRound = false;
     let lastTimeInSeconds = 0;
     let myTotalPoints = 0;
+    let appealsUsed = 0; 
 
     const socket = io();
     let currentRoom = sessionStorage.getItem('currentRoom') || '';
@@ -556,7 +558,7 @@
         document.getElementById('timer-display').innerText = `זמן: ${mins}:${secs}`;
     }
 
-    // המנגנון האוטומטי החדש
+    // המנגנון האוטומטי החדש לבדיקת תשובות
     async function submitGame() {
         unlockAudio(); 
         clearInterval(timerInterval);
@@ -647,7 +649,7 @@
                         
                         myTotalPoints += newPoints;
 
-                        // שמירה סודית של מילים מעולות בלבד
+                        // שמירה סודית של מילים מעולות בלבד (הערה: הוסרה מהלקוח לבקשת עופר, נשאר רק צד שרת)
                         if (Math.abs(newPoints - pointsPerQuestion) < 0.01) {
                             socket.emit('logApprovedWord', { category: item.catId, word: item.answer });
                         }
@@ -857,17 +859,14 @@
 
     function playAgainInSameRoom() {
         if (isMultiplayerMode) {
-            // במולטיפלייר חוזרים ללובי, התיבות ישמרו את מצבן מהטעינה הראשונית
             socket.emit('backToLobby', currentRoom);
         } else {
-            // בשחקן יחיד נטען מחדש, מה שימשוך את השם והתיבות מ-sessionStorage אוטומטית
             location.reload();
         }
     }
 
     socket.on('returnToLobby', (data) => {
         currentLetter = data.letter;
-        // קריאה מ-sessionStorage כדי לשחזר תיבות שנבחרו במולטיפלייר
         disabledCategoriesList = JSON.parse(sessionStorage.getItem('savedCategories') || '[]');
         document.querySelectorAll('.cat-disable-cb').forEach(cb => {
             cb.checked = disabledCategoriesList.includes(cb.value);
