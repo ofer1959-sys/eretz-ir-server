@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const fs = require('fs'); // ספרייה לניהול קבצים (קריאה וכתיבה)
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,52 +11,51 @@ const io = new Server(server);
 app.use(express.static('public'));
 app.use(express.json());
 
-const DB_FILE = 'approved_words.json'; // שם הקובץ שבו יישמרו המילים
+const DB_FILE = 'approved_words.json'; 
+const HISTORY_FILE = 'game_history.json'; // קובץ חדש לשמירת היסטוריית המשחקים למנהל
+
 let aiApprovedWords = {};
+let globalGameHistory = []; // מערך היסטוריית המשחקים
 const rooms = {};
 
-// ==========================================
-// מנגנון שמירה וטעינה של המילים מהקובץ
-// ==========================================
-// טעינת המילים הקיימות כשהשרת עולה
+// --- טעינת נתונים מהקבצים בעליית השרת ---
 if (fs.existsSync(DB_FILE)) {
     try {
         const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         for (let cat in data) {
             aiApprovedWords[cat] = new Set(data[cat]);
         }
-        console.log("✅ מאגר המילים שוחזר בהצלחה מהקובץ.");
-    } catch (e) {
-        console.error("❌ שגיאה בקריאת קובץ המילים:", e.message);
-    }
+    } catch (e) { console.error("שגיאה בקריאת קובץ המילים:", e.message); }
 }
 
-// פונקציה לשמירת המילים לקובץ בכל פעם שיש עדכון
+if (fs.existsSync(HISTORY_FILE)) {
+    try {
+        globalGameHistory = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    } catch (e) { console.error("שגיאה בקריאת היסטוריית המשחקים:", e.message); }
+}
+
 function saveWordsToFile() {
     try {
         const dataToSave = {};
-        for (let cat in aiApprovedWords) {
-            dataToSave[cat] = Array.from(aiApprovedWords[cat]);
-        }
+        for (let cat in aiApprovedWords) { dataToSave[cat] = Array.from(aiApprovedWords[cat]); }
         fs.writeFileSync(DB_FILE, JSON.stringify(dataToSave), 'utf8');
-    } catch (e) {
-        console.error("❌ שגיאה בשמירת המילים לקובץ:", e.message);
-    }
+    } catch (e) {}
 }
 
-// ==========================================
+function saveHistoryToFile() {
+    try {
+        fs.writeFileSync(HISTORY_FILE, JSON.stringify(globalGameHistory), 'utf8');
+    } catch (e) {}
+}
 
+// --- מנגנון איתור השופט (AI) ---
 let activeModelName = null;
 
 async function initializeGemini() {
     const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
-    if (!apiKey) {
-        console.error("❌ מפתח API חסר בשרת!");
-        return;
-    }
+    if (!apiKey) return;
     
     try {
-        console.log("🔍 מושך רשימת מודלים מגוגל...");
         const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
         const res = await fetch(modelsUrl);
         const data = await res.json();
@@ -65,8 +64,6 @@ async function initializeGemini() {
         
         const validModels = data.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'));
         
-        console.log("🛠️ מתחיל בבדיקת חינמיות... (מאתר מודל עם מכסה פתוחה)");
-        
         const sortedModels = validModels.sort((a, b) => {
             if (a.name.includes('flash')) return -1;
             if (b.name.includes('flash')) return 1;
@@ -74,31 +71,20 @@ async function initializeGemini() {
         });
 
         for (let m of sortedModels) {
-            console.log(`בודק את המודל: ${m.name}...`);
             const testUrl = `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`;
             const testRes = await fetch(testUrl, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({contents: [{parts: [{text: "test"}]}]})
             });
-            
             const testData = await testRes.json();
-            
             if (!testData.error) {
-                console.log(`✅ בינגו! המודל ${m.name} פתוח ועובד בחינם.`);
                 activeModelName = m.name.replace('models/', '');
+                console.log(`✅ מודל השופט פעיל: ${activeModelName}`);
                 return;
-            } else {
-                console.log(`❌ נכשל (${testData.error.message.substring(0, 60)}...)`);
             }
         }
-        
-        console.error("\n⛔ שגיאה קריטית: אף מודל לא פתוח לשימוש במפתח שלך (המכסה היא 0).");
-        console.error("עליך לייצר מפתח חדש ב-Google AI Studio תחת *פרויקט חדש לגמרי*.\n");
-        
-    } catch (error) {
-        console.error("❌ שגיאה באתחול מול גוגל:", error.message);
-    }
+    } catch (error) { console.error("שגיאה באתחול מול גוגל:", error.message); }
 }
 
 initializeGemini();
@@ -106,66 +92,48 @@ initializeGemini();
 async function callGeminiAPI(prompt) {
     const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
     if (!apiKey) throw new Error("מפתח API חסר");
-    if (!activeModelName) throw new Error("כל המודלים במפתח שלך נחסמו עקב מכסה של 0. עליך לייצר מפתח API חדש מול גוגל.");
+    if (!activeModelName) throw new Error("מכסת חינם הסתיימה. בדוק מפתח API.");
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModelName}:generateContent?key=${apiKey}`;
-    
     const response = await fetch(url, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
-
     const data = await response.json();
-
     if (data.error) throw new Error(data.error.message);
     if (!data.candidates || !data.candidates[0].content) throw new Error("תשובה ריקה מג'מיני");
-
     return data.candidates[0].content.parts[0].text;
 }
 
 app.post('/api/ask-judge-batch', async (req, res) => {
     try {
         const { letter, items } = req.body;
-        if (!items || items.length === 0) {
-            return res.json({ results: {} });
-        }
+        if (!items || items.length === 0) return res.json({ results: {} });
 
         let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
-
-        const prompt = `
-אתה שופט במשחק 'ארץ עיר' בעברית. בדוק את המילים הבאות שמתחילות באות '${letter}'.
+        const prompt = `אתה שופט במשחק 'ארץ עיר'. בדוק את המילים הבאות שמתחילות באות '${letter}'.
 חוקים:
-1. המילה חייבת להיות קיימת בעברית (או שם לועזי מקובל מאוד בעברית).
-2. קבל שגיאות כתיב קלות אם הכוונה ברורה, אבל הורד את הניקוד ל-5.
-3. התעלם מה' הידיעה בתחילת מילה.
-4. אם המילה נכונה ותקינה, הניקוד הוא 10.
-5. אם המילה אינה קשורה לקטגוריה, אינה קיימת, או אינה באות הנכונה, הניקוד הוא 0.
+1. המילה חייבת להיות קיימת בעברית.
+2. קבל שגיאות כתיב קלות והורד ניקוד ל-5.
+3. התעלם מה' הידיעה.
+4. אם המילה נכונה ותקינה, הניקוד 10.
+5. אחרת, 0.
 
-רשימת המילים לבדיקה:
+רשימה:
 ${promptList}
 
-עליך להחזיר אך ורק מבנה JSON תקין כפי שמוצג בדוגמה הבאה, ללא שום טקסט נוסף:
-{
-  "results": {
-    "catId_1": { "points": 10, "reason": "תשובה נכונה" },
-    "catId_2": { "points": 5, "reason": "שגיאת כתיב קלה" }
-  }
-}`;
+החזר רק JSON:
+{"results":{"catId_1":{"points":10,"reason":""}}}`;
 
         const responseText = await callGeminiAPI(prompt);
-        
         let jsonString = responseText;
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (jsonMatch) jsonString = jsonMatch[0];
         
-        const parsedData = JSON.parse(jsonString);
-        res.json(parsedData);
+        res.json(JSON.parse(jsonString));
     } catch (error) {
-        console.error("\n=== שגיאת תקשורת מול השופט ===");
-        console.error(error);
-        console.error("================================\n");
-        res.status(500).json({ error: error.message || "שגיאה לא ידועה" });
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -185,22 +153,13 @@ io.on('connection', (socket) => {
         };
         
         socket.join(roomId);
-        socket.emit('roomCreated', { 
-            roomId, 
-            letter: randomLetter, 
-            disabledCategories: rooms[roomId].disabledCategories,
-            players: rooms[roomId].players 
-        });
+        socket.emit('roomCreated', { roomId, letter: randomLetter, disabledCategories: rooms[roomId].disabledCategories, players: rooms[roomId].players });
     });
 
     socket.on('joinRoom', (data) => {
         const { roomId, playerName, isHostClaim } = data;
         const room = rooms[roomId];
-        
-        if (!room) {
-            socket.emit('gameError', 'החדר לא קיים או שנסגר.');
-            return;
-        }
+        if (!room) return socket.emit('gameError', 'החדר לא קיים או שנסגר.');
         
         const existingPlayer = room.players.find(p => p.socketId === socket.id || p.name === playerName);
         let isHost = false;
@@ -214,12 +173,7 @@ io.on('connection', (socket) => {
         }
         
         socket.join(roomId);
-        socket.emit('roomJoined', { 
-            roomId, 
-            letter: room.letter,
-            disabledCategories: room.disabledCategories,
-            isHost 
-        });
+        socket.emit('roomJoined', { roomId, letter: room.letter, disabledCategories: room.disabledCategories, isHost });
         io.to(roomId).emit('updatePlayers', room.players);
     });
 
@@ -227,46 +181,26 @@ io.on('connection', (socket) => {
         const room = rooms[data.roomId];
         if (room && room.host === socket.id) {
             room.submissions = [];
-            io.to(data.roomId).emit('gameStarted', { 
-                letter: room.letter,
-                disabledCategories: room.disabledCategories
-            });
+            io.to(data.roomId).emit('gameStarted', { letter: room.letter, disabledCategories: room.disabledCategories });
         }
     });
 
-    socket.on('announceFinish', (data) => {
-        socket.to(data.roomId).emit('playerAnnouncedFinish', data.playerName);
-    });
+    socket.on('announceFinish', (data) => socket.to(data.roomId).emit('playerAnnouncedFinish', data.playerName));
 
     socket.on('submitScore', (data) => {
         const room = rooms[data.roomId];
         if (!room) return;
-
         const player = room.players.find(p => p.socketId === socket.id);
         if (!player) return;
 
-        const existingSub = room.submissions.find(s => s.name === player.name);
-        if (!existingSub) {
-            room.submissions.push({
-                name: player.name,
-                score: data.totalScore,
-                time: data.timeInSeconds,
-                answers: data.answers
-            });
+        if (!room.submissions.find(s => s.name === player.name)) {
+            room.submissions.push({ name: player.name, score: data.totalScore, time: data.timeInSeconds, answers: data.answers });
         }
 
         const waitingFor = room.players.filter(p => !room.submissions.find(s => s.name === p.name)).map(p => p.name);
+        io.to(data.roomId).emit('playerFinishedStatus', { playerName: player.name, submittedCount: room.submissions.length, totalPlayers: room.players.length, waitingFor });
 
-        io.to(data.roomId).emit('playerFinishedStatus', {
-            playerName: player.name,
-            submittedCount: room.submissions.length,
-            totalPlayers: room.players.length,
-            waitingFor
-        });
-
-        if (room.submissions.length >= room.players.length) {
-            processAndSendResults(data.roomId);
-        }
+        if (room.submissions.length >= room.players.length) processAndSendResults(data.roomId);
     });
 
     socket.on('forceEndGame', (data) => {
@@ -275,44 +209,17 @@ io.on('connection', (socket) => {
             if (data.forceHostSubmit) {
                 const player = room.players.find(p => p.socketId === socket.id);
                 if (player && !room.submissions.find(s => s.name === player.name)) {
-                    room.submissions.push({
-                        name: player.name,
-                        score: data.myTotalScore,
-                        time: data.myTime,
-                        answers: data.myAnswers
-                    });
+                    room.submissions.push({ name: player.name, score: data.myTotalScore, time: data.myTime, answers: data.myAnswers });
                 }
             }
-            
             room.players.forEach(p => {
-                if (!room.submissions.find(s => s.name === p.name)) {
-                    room.submissions.push({
-                        name: p.name,
-                        score: 0,
-                        time: 999,
-                        answers: {}
-                    });
-                }
+                if (!room.submissions.find(s => s.name === p.name)) room.submissions.push({ name: p.name, score: 0, time: 999, answers: {} });
             });
             processAndSendResults(data.roomId);
         }
     });
 
-    socket.on('announceAppeal', (data) => {
-        io.to(data.roomId).emit('appealStarted', data.playerName);
-    });
-
-    socket.on('submitAppeal', (data) => {
-        const room = rooms[data.roomId];
-        if (!room) return;
-        
-        let sub = room.submissions.find(s => s.name === data.playerName);
-        if (sub) {
-            sub.score = data.newTotalScore;
-            sub.answers = data.answers;
-        }
-        processAndSendResults(data.roomId);
-    });
+    socket.on('announceAppeal', (data) => io.to(data.roomId).emit('appealStarted', data.playerName));
 
     socket.on('backToLobby', (roomId) => {
         const room = rooms[roomId];
@@ -320,36 +227,31 @@ io.on('connection', (socket) => {
             room.submissions = [];
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
-            io.to(roomId).emit('returnToLobby', { 
-                letter: room.letter, 
-                players: room.players,
-                disabledCategories: room.disabledCategories
-            });
+            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players, disabledCategories: room.disabledCategories });
         }
     });
 
-    // === עדכון: שמירת מילים לקובץ ===
+    // --- אזור הניהול ---
     socket.on('logApprovedWord', (data) => {
-        if (!aiApprovedWords[data.category]) {
-            aiApprovedWords[data.category] = new Set();
-        }
+        if (!aiApprovedWords[data.category]) aiApprovedWords[data.category] = new Set();
         aiApprovedWords[data.category].add(data.word);
-        saveWordsToFile(); // שמירה לקובץ
+        saveWordsToFile();
     });
 
-    socket.on('getApprovedWords', () => {
-        const formatted = {};
-        for (let cat in aiApprovedWords) {
-            formatted[cat] = Array.from(aiApprovedWords[cat]);
-        }
-        socket.emit('receiveApprovedWords', formatted);
+    socket.on('getAdminData', () => {
+        const formattedWords = {};
+        for (let cat in aiApprovedWords) { formattedWords[cat] = Array.from(aiApprovedWords[cat]); }
+        socket.emit('receiveAdminData', { words: formattedWords, history: globalGameHistory });
     });
 
     socket.on('clearCategoryWords', (category) => {
-        if (aiApprovedWords[category]) {
-            aiApprovedWords[category].clear();
-            saveWordsToFile(); // עדכון הקובץ (מחיקה)
-        }
+        if (aiApprovedWords[category]) { aiApprovedWords[category].clear(); saveWordsToFile(); }
+    });
+
+    socket.on('clearGameHistory', () => {
+        globalGameHistory = [];
+        saveHistoryToFile();
+        socket.emit('receiveAdminData', { words: {}, history: globalGameHistory });
     });
 
     socket.on('disconnect', () => {
@@ -360,19 +262,12 @@ io.on('connection', (socket) => {
                 const isHost = room.players[pIndex].isHost;
                 room.players.splice(pIndex, 1);
                 io.to(roomId).emit('updatePlayers', room.players);
-                
                 if (room.players.length === 0) {
                     delete rooms[roomId];
                 } else if (isHost) {
                     room.players[0].isHost = true;
                     room.host = room.players[0].socketId;
-                    io.to(room.players[0].socketId).emit('roomJoined', { 
-                        roomId, 
-                        letter: room.letter, 
-                        disabledCategories: room.disabledCategories,
-                        isHost: true 
-                    });
-                    io.to(roomId).emit('updatePlayers', room.players);
+                    io.to(room.players[0].socketId).emit('roomJoined', { roomId, letter: room.letter, disabledCategories: room.disabledCategories, isHost: true });
                 }
             }
         }
@@ -391,24 +286,27 @@ function processAndSendResults(roomId) {
         if (sub.time !== 999 && bestTime > 0) {
             let threshold = bestTime * 1.5;
             if (sub.time > threshold) {
-                let extraTime = sub.time - threshold;
-                let penaltySteps = Math.ceil(extraTime / (bestTime * 0.1));
-                penalty = penaltySteps * 5;
+                penalty = Math.ceil((sub.time - threshold) / (bestTime * 0.1)) * 5;
             }
         }
-        let finalScore = Math.max(0, sub.score - penalty);
-        return { ...sub, finalScore, penalty };
+        return { ...sub, finalScore: Math.max(0, sub.score - penalty), penalty };
     });
 
-    leaderboard.sort((a, b) => {
-        if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
-        return a.time - b.time;
-    });
+    leaderboard.sort((a, b) => b.finalScore !== a.finalScore ? b.finalScore - a.finalScore : a.time - b.time);
 
-    io.to(roomId).emit('gameOver', leaderboard);
+    // שמירת ההיסטוריה הגלובלית לקובץ
+    const dateObj = new Date();
+    const historyRecord = {
+        date: dateObj.toLocaleDateString('he-IL'),
+        time: dateObj.toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'}),
+        letter: room.letter,
+        players: leaderboard.map(p => ({ name: p.name, score: p.finalScore }))
+    };
+    globalGameHistory.push(historyRecord);
+    saveHistoryToFile();
+
+    io.to(roomId).emit('gameOver', { leaderboard, historyRecord });
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
