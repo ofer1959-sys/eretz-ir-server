@@ -20,6 +20,7 @@
         .btn-success { background: var(--success); color: white; }
         .btn-host { background: #8e44ad; color: white; margin-top: 15px;}
         .btn-danger { background: var(--danger); color: white; }
+        .btn-summary { background: #e74c3c; color: white; margin-top: 20px; font-size: 1.3rem;}
         .countdown { font-size: 8rem; color: var(--primary); font-weight: bold; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
         .letter-display { font-size: 6rem; color: var(--secondary); font-weight: bold; margin: 1rem 0; }
@@ -95,10 +96,23 @@
     </div>
 
     <div id="admin-screen" class="screen" style="text-align: right;">
-        <h2 style="color: var(--primary); text-align: center;">🛠️ מתחם איסוף מילים (מנהל)</h2>
-        <p style="text-align: center; color: #666;">כאן מופיעות מילים שאושרו על ידי שופט ה-AI עם ציון מלא (100%), מוכנות להעתקה.</p>
+        <h2 style="color: var(--primary); text-align: center;">🛠️ מתחם מנהל - סבא עופר</h2>
         
-        <div id="admin-words-container" style="margin-top: 20px;"></div>
+        <h3 style="color: var(--secondary); margin-top: 20px;">📜 היסטוריית משחקים</h3>
+        <div style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
+            <table class="leaderboard-table" style="margin-top: 0;">
+                <thead><tr><th>תאריך ושעה</th><th>אות</th><th>שחקנים וציונים</th></tr></thead>
+                <tbody id="admin-history-body"></tbody>
+            </table>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button class="btn-success" onclick="shareAdminHistoryWhatsApp()">וואטסאפ</button>
+            <button class="btn-primary" style="background:#3498db" onclick="shareAdminHistoryEmail()">מייל</button>
+            <button class="btn-danger" onclick="clearAdminHistory()">מחק היסטוריה</button>
+        </div>
+
+        <h3 style="color: var(--secondary); margin-top: 40px;">🧠 מאגר מילים מצטיינות (100%)</h3>
+        <div id="admin-words-container" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 8px;"></div>
         
         <button class="btn-primary" onclick="closeAdmin()" style="margin-top: 30px;">חזור למסך הראשי</button>
     </div>
@@ -152,16 +166,28 @@
         </table>
 
         <div id="answers-comparison-container" style="margin-top: 20px;"></div>
+        
+        <button class="btn-summary" onclick="showSummaryScreen()">סיום וקבלת התוצאות 📊</button>
+    </div>
 
+    <div id="summary-screen" class="screen">
+        <h1 style="color: var(--primary); font-size: 2.2rem; margin-bottom: 10px;">סיכום המשחקים 🏆</h1>
+        <p style="color: #666;">כל התוצאות מאז הכניסה למשחק</p>
+        
+        <div id="summary-tables-container" style="margin-top: 10px;"></div>
+        
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
-            <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
-            <button class="btn-success" onclick="shareResultsWhatsApp()">שתף תוצאות ב-WhatsApp 📱</button>
+            <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">שחק שוב באותן הגדרות 🎮</button>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-success" onclick="shareSummaryWhatsApp()">שתף ב-WhatsApp</button>
+                <button class="btn-primary" style="background:#3498db" onclick="shareSummaryEmail()">שתף במייל</button>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-    // מאגרים מקומיים
+    // מאגרים מקומיים 
     const RAW_DATA = {
         capitals: `אבו דאבי,אבוג'ה,אקרה,אדיס אבבה,עדן,אלג'יר,עמאן,עמן,רבט עמון,אמסטרדם,אנדורה לה ולה,אנקרה,אנטננריבו,אפיה,אשגבאט,אסמרה,אסמארה,אסטנה,אסונסיון,אתונה,בגדאד,בגדד,בקו,באקו,במקו,בנדר סרי בגוואן,בנגקוק,בנגי,בנג'ול,בסטרה,בייג'ינג,ביג'ינג,ביירות,בלגרד,בלמופן,ברלין,ברן,בישקק,ביסאו,בלומפונטיין,בוגוטה,ברזיליה,ברטיסלאבה,ברזוויל,ברזויל,ברידג'טאון,בריסל,בוקרשט,בודפשט,בואנוס איירס,בוג'ומבורה,קהיר,קנברה,קייפטאון,קראקס,קסטריז,קישינב,קולומבו,קונאקרי,קופנהגן,קוטונו,דקר,דמשק,דאר א-סלאם,דאקה,דקה,דילי,ג'יבוטי,דודומה,דוחה,דבלין,דושנבה,פריטאון,פונפוטי,גאבורון,ג'ורג'טאון,גיטגה,גואטמלה סיטי,האנוי,הנוי,הארארה,הוואנה,הואנה,הלסינקי,הוניארה,אסלאמאבאד,איסלמבד,איסלמבאד,ג'קרטה,ירושלים,ירושליים,ג'ובה,קאבול,קמפלה,קטמנדו,חרטום,קיגאלי,קינגסטון,קינגסטאון,קינשאסה,קינשסה,קואלה לומפור,כווית סיטי,כוית סיטי,קייב,לה פאס,ליברוויל,לילונגווה,לימה,ליסבון,לובליאנה,לובמבה,לומה,לונדון,לואנדה,לוסקה,לוקסמבורג,מדריד,מג'ורו,מלאבו,מאלה,מנגואה,מנאמה,מנילה,מפוטו,מסרו,מבבנה,מקסיקו סיטי,מינסק,מוגדישו,מונקו,מונרוביה,מונטווידאו,מורוני,מוסקבה,מוסקט,נג'מנה,ניירובי,נסאו,נייפידאו,ניו דלהי,נגרולמוד,ניאמיי,ניקוסיה,נואקשוט,נוקואלופה,אוסלו,אוטווה,ואגאדוגו,פליקיר,פנמה סיטי,פרמריבו,פריז,פריס,פנום פן,פודגוריצה,פורט לואי,פורט מורסבי,פורט אוף ספיין,פורט וילה,פורט-או-פרנס,פורטו-נובו,פראג,פרג,פראיה,פרטוריה,פוטרג'איה,פיונגיאנג,קיטו,רבאט,רבט,רייקיאוויק,ריגה,ריאד,רומא,רוזו,סנט ג'ורג'ס,סנט ג'ונס,סן חוסה,סן מרינו,סן סלוודור,צנעא,סנטיאגו,סנטו דומינגו,סרייבו,סיאול,סינגפור,סקופיה,סופיה,דרום טאראווה,סרי ג'איאווארדנפורה קוטה,סטוקהולם,שטוקהולם,סוקרה,סובה,סאו טומה,טאיפיי,טאלין,טשקנט,טביליסי,טגוסיגלפה,טהרן,טהראן,הג,דן הג,דן האג,האג,ת'ימפו,טירנה,טוקיו,טריפולי,תוניס,טוניס,אולן בטור,ואדוץ,ולטה,קריית הוותיקן,ויקטוריה,וינה,ויינטיאן,וילנה,ורשה,וורשה,וושינגטון די. סי,וושינגטון.,ולינגטון,וולינגטון,וינדהוק,יאמוסוקרו,יאונדה,יארן,ירוואן,זאגרב,זגרב`,
         countries: `אפגניסטן,אלבניה,אלג'יריה,אנדורה,אנגולה,אנטיגואה וברבודה,ארגנטינה,ארמניה,אוסטרליה,אוסטריה,אזרבייג'ן,איי בהאמה,בחריין,בנגלדש,ברבדוס,בלארוס,בלגיה,בליז,בנין,בהוטן,בוליביה,בוסניה והרצגובינה,בוצוואנה,ברזיל,ברוניי,בולגריה,בורקינה פאסו,בורונדי,כף ורדה,קמבודיה,קמרון,קנדה,הרפובליקה המרכז-אפריקאית,צ'אד,צ'ילה,סין,קולומביה,קומורו,הרפובליקה הדמוקרטית של קונגו,הרפובליקה של קונגו,קוסטה ריקה,חוף השנהב,קרואטיה,קובה,קפריסין,צ'כיה,דנמרק,ג'יבוטי,דומיניקה,הרפובליקה הדומיניקנית,אקוודור,מצרים,אל סלוודור,גינאה המשוונית,אריתריאה,אסטוניה,אסוואטיני,אתיופיה,פיג'י,פינלנד,צרפת,גבון,גמביה,גאורגיה,גרמניה,גאנה,יוון,גרנדה,גואטמלה,גינאה,גינאה-ביסאו,גיאנה,האיטי,הונדורס,הונגריה,איסלנד,הודו,אינדונזיה,איראן,עיראק,אירלנד,ישראל,איטליה,ג'מייקה,יפן,ירדן,קזחסטן,קניה,קיריבטי,קוריאה הצפונית,קוריאה הדרומית,כווית,קירגיזסטן,לאוס,לטביה,לבנון,לסוטו,ליבריה,לוב,ליכטנשטיין,ליטא,לוקסמבורג,מדגסקר,מלאווי,מלזיה,האיים המלדיביים,מאלי,מלטה,איי מרשל,מאוריטניה,מאוריציוס,מקסיקו,מיקרונזיה,מולדובה,מונקו,מונגוליה,מונטנגרו,מרוקו,מוזמביק,מיאנמר,נמיביה,נאורו,נפאל,הולנד,ניו זילנד,ניקרגואה,ניז'ר,ניגריה,מקדוניה הצפונית,נורווגיה,עומאן,פקיסטן,פלאו,פנמה,פפואה גינאה החדשה,פרגוואי,פרו,הפיליפינים,פולין,פורטוגל,קטר,רומניה,רוסיה,רואנדה,סנט קיטס ונוויס,סנט לוסיה,סנט וינסנט והגרנדינים,סמואה,סן מרינו,סאו טומה ופרינסיפה,ערב הסעודית,סנגל,סרביה,סיישל,סיירה לאון,סינגפור,סלובקיה,סלובניה,איי שלמה,סומליה,דרום אפריקה,דרום סודן,ספרד,סרי לנקה,סודן,סורינאם,שוודיה,שווייץ,סוריה,טג'יקיסטן,טנזניה,תאילנד,טימור-לסטה,טוגו,טונגה,טרינידד וטובגו,תוניסיה,טורקיה,טורקמניסטן,טובאלו,אוגנדה,אוקראינה,איחוד האמירויות הערביות,הממלכה המאוחדת,ארצות הברית,אורוגוואי,אוזבקיסטן,ונואטו,ונצואלה,וייטנאם,תימן,זמביה,זימבבואה,הכס הקדוש,ותיקן,אנגליה,סקוטלנד,בריטניה,אזרביג'אן,בוטסואנה,בוטצואנה,קמא,קונגו,סלוודור,סלבדור,גיאורגיה,גאנה,צפון קוריאה,דרום קוריאה,מינמר,צפון אירלנד,נורבגיה,פקיסטאן,פיליפינים,סישל,איי סיישל,סיישל,דובאי,אבו דאבי,איחוד האמירויות,טורקמניסטאן,תורקמניסטאן,ססירה ליאון,סומלילנד,טוניסיה,ויאטנם,ויאטנאם,זימבבווה,שבדיה`,
@@ -270,7 +296,6 @@
     let hasSubmittedCurrentRound = false;
     let lastTimeInSeconds = 0;
     let myTotalPoints = 0;
-    let appealsUsed = 0; 
 
     const socket = io();
     let currentRoom = sessionStorage.getItem('currentRoom') || '';
@@ -297,7 +322,6 @@
             }
         }
 
-        // טעינת בחירת הקטגוריות מהמשחק הקודם
         const savedDisabledCats = JSON.parse(sessionStorage.getItem('savedCategories') || '[]');
         if (savedDisabledCats.length > 0) {
             document.querySelectorAll('.cat-disable-cb').forEach(cb => {
@@ -338,7 +362,7 @@
     function promptAdminPassword() {
         const pass = prompt("נא להזין סיסמת ניהול:");
         if (pass === "99787") {
-            socket.emit('getApprovedWords');
+            socket.emit('getAdminData'); // מבקש מהשרת גם את המילים וגם את ההיסטוריה
             showScreen('admin-screen');
         } else if (pass !== null) {
             alert("סיסמה שגויה.");
@@ -558,7 +582,6 @@
         document.getElementById('timer-display').innerText = `זמן: ${mins}:${secs}`;
     }
 
-    // המנגנון האוטומטי החדש לבדיקת תשובות
     async function submitGame() {
         unlockAudio(); 
         clearInterval(timerInterval);
@@ -581,7 +604,6 @@
         const pointsPerQuestion = activeCategories.length > 0 ? (100 / activeCategories.length) : 0;
         let itemsToJudge = [];
 
-        // שלב א': בדיקה מקומית
         activeCategories.forEach(cat => {
             const inputEl = document.getElementById('input-' + cat.id);
             const val = inputEl ? inputEl.value.trim() : "";
@@ -604,7 +626,6 @@
                     catId: cat.id
                 };
 
-                // אם נפסל מקומית - בודקים אם כדאי לשלוח ל-AI
                 let cleanUser = val.replace(/['"־\- ]/g, '');
                 if (!validation.isCorrect && cleanUser.startsWith(currentLetter)) {
                     itemsToJudge.push({
@@ -618,7 +639,6 @@
             }
         });
 
-        // שלב ב': בדיקת AI אוטומטית למילים שנדחו
         if (itemsToJudge.length > 0) {
             if (statusText) statusText.innerText = "נא המתן לבדיקת שופט AI 🤖...";
             if (isMultiplayerMode) socket.emit('announceAppeal', {roomId: currentRoom, playerName: myName});
@@ -649,7 +669,6 @@
                         
                         myTotalPoints += newPoints;
 
-                        // שמירה סודית של מילים מעולות בלבד (הערה: הוסרה מהלקוח לבקשת עופר, נשאר רק צד שרת)
                         if (Math.abs(newPoints - pointsPerQuestion) < 0.01) {
                             socket.emit('logApprovedWord', { category: item.catId, word: item.answer });
                         }
@@ -663,12 +682,22 @@
 
         myTotalPoints = formatScore(myTotalPoints);
 
-        // שלב ג': שליחת תוצאות והמתנה לאחרים (או סיום אם יחיד)
         if (statusText) statusText.innerText = isMultiplayerMode ? "הבדיקה הסתיימה! ממתין לשאר השחקנים..." : "מכין את התוצאות שלך...";
         
         if (isMultiplayerMode) {
             socket.emit('submitScore', { roomId: currentRoom, totalScore: myTotalPoints, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
         } else {
+            // שמירת היסטוריה במשחק יחיד
+            const histRecord = {
+                date: new Date().toLocaleDateString('he-IL'),
+                time: new Date().toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'}),
+                letter: currentLetter,
+                players: [{ name: myName, score: myTotalPoints }]
+            };
+            let myGameHistory = JSON.parse(sessionStorage.getItem('myGameHistory') || '[]');
+            myGameHistory.push(histRecord);
+            sessionStorage.setItem('myGameHistory', JSON.stringify(myGameHistory));
+
             const p = { name: myName, score: myTotalPoints, finalScore: myTotalPoints, time: lastTimeInSeconds, answers: playerAnswers };
             showFinalResults([p], p);
         }
@@ -693,7 +722,15 @@
         }
     });
 
-    socket.on('gameOver', (leaderboard) => {
+    socket.on('gameOver', (data) => {
+        let leaderboard = data.leaderboard;
+        let historyRecord = data.historyRecord;
+
+        // שמירת היסטוריה מקומית במסך השחקן
+        let myGameHistory = JSON.parse(sessionStorage.getItem('myGameHistory') || '[]');
+        myGameHistory.push(historyRecord);
+        sessionStorage.setItem('myGameHistory', JSON.stringify(myGameHistory));
+
         let myData = leaderboard.find(p => p.name === myName);
         if (!myData) myData = { name: myName, answers: playerAnswers };
         if (!myData.answers) myData.answers = playerAnswers;
@@ -704,39 +741,91 @@
         showNotification(`השחקן/ית ${playerName} ממתין/ה לשופט ה-AI...`);
     });
 
-    // קליטת נתוני המילים המאושרות למסך המנהל
-    socket.on('receiveApprovedWords', (data) => {
+    // --- אזור הניהול הסודי ---
+    window.globalAdminHistory = [];
+
+    socket.on('receiveAdminData', (data) => {
+        window.globalAdminHistory = data.history || [];
+        renderAdminHistory();
+        
+        // רינדור המילים
         const container = document.getElementById('admin-words-container');
         let html = '';
         let found = false;
+        const words = data.words || {};
         
-        for (let cat in data) {
-            if (data[cat] && data[cat].length > 0) {
+        for (let cat in words) {
+            if (words[cat] && words[cat].length > 0) {
                 found = true;
                 const categoryObj = CATEGORIES.find(c => c.id === cat);
                 const catName = categoryObj ? categoryObj.label : cat;
                 
                 html += `<div style="margin-bottom: 20px; text-align: right; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
                             <h3 style="margin-top: 0; margin-bottom: 10px; color: var(--primary); display: flex; justify-content: space-between; align-items: center;">
-                                <span>קטגוריה: ${catName} (${cat})</span>
-                                <button onclick="clearCategoryWords('${cat}')" class="btn-danger" style="width: auto; padding: 5px 15px; font-size: 0.9rem; margin: 0; border-radius: 5px;">מחק מאגר זה</button>
+                                <span>${catName} (${cat})</span>
+                                <button onclick="clearCategoryWords('${cat}')" class="btn-danger" style="width: auto; padding: 5px 15px; font-size: 0.9rem; margin: 0; border-radius: 5px;">מחק מאגר</button>
                             </h3>
-                            <p style="font-family: monospace; font-size: 1.2rem; line-height: 1.6; word-wrap: break-word; color: #333; margin: 0;">${data[cat].join(', ')}</p>
+                            <p style="font-family: monospace; font-size: 1.1rem; line-height: 1.6; word-wrap: break-word; color: #333; margin: 0;">${words[cat].join(', ')}</p>
                          </div>`;
             }
         }
-        
-        if (!found) {
-            html = '<p style="text-align: center; color: #666; font-size: 1.2rem;">לא נאגרו מילים חדשות בינתיים.</p>';
-        }
-        
+        if (!found) html = '<p style="text-align: center; color: #666;">לא נאגרו מילים חדשות בינתיים.</p>';
         container.innerHTML = html;
     });
 
+    function renderAdminHistory() {
+        const tbody = document.getElementById('admin-history-body');
+        tbody.innerHTML = '';
+        if (!window.globalAdminHistory || window.globalAdminHistory.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="color:#666;">אין נתונים עדיין.</td></tr>';
+            return;
+        }
+        
+        [...window.globalAdminHistory].reverse().forEach(game => {
+            const playersStr = game.players.map(p => `${p.name} (${formatScore(p.score)})`).join(', ');
+            tbody.innerHTML += `
+                <tr>
+                    <td>${game.date}<br><span style="color:#888">${game.time}</span></td>
+                    <td style="font-weight:bold; color:var(--secondary); font-size:1.2rem;">${game.letter}</td>
+                    <td>${playersStr}</td>
+                </tr>
+            `;
+        });
+    }
+
+    function clearAdminHistory() {
+        if (confirm("האם למחוק את כל היסטוריית המשחקים של השרת? פעולה זו בלתי הפיכה!")) {
+            socket.emit('clearGameHistory');
+        }
+    }
+
+    function shareAdminHistoryWhatsApp() {
+        const text = buildAdminHistoryText();
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    function shareAdminHistoryEmail() {
+        const text = buildAdminHistoryText();
+        window.location.href = `mailto:?subject=היסטוריית משחקים - סבא עופר&body=${encodeURIComponent(text)}`;
+    }
+
+    function buildAdminHistoryText() {
+        if (!window.globalAdminHistory || window.globalAdminHistory.length === 0) return "אין היסטוריית משחקים.";
+        let text = "*היסטוריית משחקים - סבא עופר*\n\n";
+        [...window.globalAdminHistory].reverse().forEach(game => {
+            text += `תאריך: ${game.date} ${game.time} | אות: ${game.letter}\n`;
+            game.players.forEach(p => {
+                text += `- ${p.name}: ${formatScore(p.score)} נק'\n`;
+            });
+            text += "\n";
+        });
+        return text;
+    }
+
     function clearCategoryWords(categoryId) {
-        if (confirm(`האם אתה בטוח שברצונך לרוקן את כל המילים שנאספו בקטגוריה זו?`)) {
+        if (confirm(`לרוקן את כל המילים בקטגוריה זו?`)) {
             socket.emit('clearCategoryWords', categoryId);
-            setTimeout(() => socket.emit('getApprovedWords'), 300); 
+            setTimeout(() => socket.emit('getAdminData'), 300); 
         }
     }
 
@@ -747,15 +836,11 @@
         
         const pointsPerQuestion = activeCategories.length > 0 ? (100 / activeCategories.length) : 0;
         let isFullPoints = Math.abs(ans.points - pointsPerQuestion) < 0.01;
-        
         let status = '';
 
         if (ans.isCorrect) {
-            if (isFullPoints) {
-                status = `<br><span style="color:green; font-size:0.8em;">✅ ${formatScore(ans.points)} נק'</span>`;
-            } else {
-                status = `<br><span style="color:orange; font-size:0.8em;">✅ ${formatScore(ans.points)} נק' (${ans.feedback})</span>`;
-            }
+            if (isFullPoints) status = `<br><span style="color:green; font-size:0.8em;">✅ ${formatScore(ans.points)} נק'</span>`;
+            else status = `<br><span style="color:orange; font-size:0.8em;">✅ ${formatScore(ans.points)} נק' (${ans.feedback})</span>`;
         } else {
             status = `<br><span style="color:red; font-size:0.8em;">❌ 0 נק' (${ans.feedback})</span>`;
         }
@@ -827,15 +912,11 @@
                                     <th class="my-col">${leaderboard.length > 1 ? 'התשובות שלי' : myData.name}</th>`;
                 
                 const otherPlayers = leaderboard.filter(p => p.name !== myData.name);
-                otherPlayers.forEach(p => {
-                    tableHtml += `<th>${p.name}</th>`;
-                });
-                
+                otherPlayers.forEach(p => tableHtml += `<th>${p.name}</th>`);
                 tableHtml += `</tr></thead><tbody>`;
 
                 activeCategories.forEach(cat => {
                     let ans = myData.answers[cat.label];
-                    
                     tableHtml += `<tr><td style="font-weight:bold; background:#f0f4f8; vertical-align:middle;">${cat.label}</td>`;
                     tableHtml += getAnswerCellHtml(ans, cat.label, cat.id, true);
 
@@ -843,18 +924,89 @@
                         const theirAns = p.answers ? p.answers[cat.label] : null;
                         tableHtml += getAnswerCellHtml(theirAns, cat.label, cat.id, false);
                     });
-
                     tableHtml += `</tr>`;
                 });
                 tableHtml += `</tbody></table></div>`;
                 comparisonContainer.innerHTML = tableHtml;
             }
             
-            window.finalLeaderboard = leaderboard;
+        } catch(err) { console.error("שגיאה קריטית במסך הסיום:", err); }
+    }
 
-        } catch(err) {
-            console.error("שגיאה קריטית במסך הסיום:", err);
+    // --- הצגת מסך סיכום משחקים ---
+    function showSummaryScreen() {
+        showScreen('summary-screen');
+        
+        let sessionHistory = JSON.parse(sessionStorage.getItem('myGameHistory') || '[]');
+        if (sessionHistory.length === 0) return;
+
+        let html = `
+            <div style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
+            <table class="leaderboard-table" style="margin-top: 0; font-size: 0.95rem;">
+                <thead><tr><th>שחקן</th><th>זמן</th><th>אות</th><th>ציון</th></tr></thead>
+                <tbody>`;
+        
+        let playerStats = {};
+
+        // עוברים מהסוף להתחלה כדי שהמשחק האחרון יופיע למעלה
+        [...sessionHistory].reverse().forEach(game => {
+            game.players.forEach(p => {
+                html += `<tr><td>${p.name}</td><td>${game.time}</td><td style="font-weight:bold; color:var(--secondary);">${game.letter}</td><td>${formatScore(p.score)}</td></tr>`;
+                
+                if (!playerStats[p.name]) playerStats[p.name] = { total: 0, count: 0 };
+                playerStats[p.name].total += p.score;
+                playerStats[p.name].count += 1;
+            });
+        });
+        html += '</tbody></table></div>';
+
+        let averagesHtml = '<h3 style="margin-top:20px; color:var(--primary);">דירוג ממוצעים מצטבר:</h3><table class="leaderboard-table"><thead><tr><th>מקום</th><th>שחקן</th><th>ממוצע</th></tr></thead><tbody>';
+        
+        let avgArray = [];
+        for (let name in playerStats) {
+            avgArray.push({ name: name, avg: playerStats[name].total / playerStats[name].count });
         }
+        avgArray.sort((a, b) => b.avg - a.avg); 
+
+        avgArray.forEach((p, idx) => {
+            let placeIcon = idx + 1;
+            if (idx === 0) placeIcon = "🥇";
+            else if (idx === 1) placeIcon = "🥈";
+            else if (idx === 2) placeIcon = "🥉";
+
+            averagesHtml += `<tr><td class="${idx===0?'gold-medal':''}">${placeIcon}</td><td><strong>${p.name}</strong></td><td>${formatScore(p.avg)}</td></tr>`;
+        });
+        averagesHtml += '</tbody></table>';
+
+        document.getElementById('summary-tables-container').innerHTML = html + averagesHtml;
+        
+        // שומר טקסט מוכן לשיתוף
+        window.currentSummaryText = buildSummaryShareText(sessionHistory, avgArray);
+    }
+
+    function buildSummaryShareText(history, averages) {
+        let text = "*סיכום משחקי ארץ עיר - סבא עופר* 🏆\n\n";
+        text += "*דירוג ממוצעים כללי:*\n";
+        averages.forEach((p, i) => {
+            const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🔹";
+            text += `${medal} ${p.name}: ${formatScore(p.avg)} נק'\n`;
+        });
+        text += "\n*פירוט המשחקים:*\n";
+        history.forEach(game => {
+            text += `אות ${game.letter} (${game.time}): `;
+            text += game.players.map(p => `${p.name} (${formatScore(p.score)})`).join(', ') + "\n";
+        });
+        return text;
+    }
+
+    function shareSummaryWhatsApp() {
+        if (!window.currentSummaryText) return;
+        window.open(`https://wa.me/?text=${encodeURIComponent(window.currentSummaryText)}`, '_blank');
+    }
+
+    function shareSummaryEmail() {
+        if (!window.currentSummaryText) return;
+        window.location.href = `mailto:?subject=סיכום משחקי ארץ עיר&body=${encodeURIComponent(window.currentSummaryText)}`;
     }
 
     function playAgainInSameRoom() {
@@ -883,24 +1035,6 @@
         }
     });
 
-    function shareResultsWhatsApp() {
-        const board = window.finalLeaderboard;
-        if (!board || !board[0]) return;
-        const winner = board[0];
-        let text = `*ארץ עיר של סבא עופר* 👑\nהאות הייתה: *${currentLetter}*\n\n`;
-        
-        if (board.length > 1) {
-            text += `המנצח/ת הוא/היא: *${winner.name}* עם ${formatScore(winner.finalScore)} נקודות!\n\n*טבלת התוצאות:*\n`;
-            board.forEach((p, idx) => {
-                const timeText = p.time === 999 ? 'פרש' : `${p.time} שנ'`;
-                text += `${idx + 1}. ${p.name} - ${formatScore(p.finalScore)} נק' (${timeText})\n`;
-            });
-        } else {
-            text += `השחקן: ${winner.name}\nתוצאה: ${formatScore(winner.score)}/100\nזמן: ${winner.time} שניות\n\n`;
-        }
-        const url = "https://wa.me/?text=" + encodeURIComponent(text);
-        window.open(url, '_blank');
-    }
 </script>
 </body>
 </html>
