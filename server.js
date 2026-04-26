@@ -12,10 +12,10 @@ app.use(express.static('public'));
 app.use(express.json());
 
 const DB_FILE = 'approved_words.json'; 
-const HISTORY_FILE = 'game_history.json'; // קובץ חדש לשמירת היסטוריית המשחקים למנהל
+const HISTORY_FILE = 'game_history.json';
 
 let aiApprovedWords = {};
-let globalGameHistory = []; // מערך היסטוריית המשחקים
+let globalGameHistory = []; 
 const rooms = {};
 
 // --- טעינת נתונים מהקבצים בעליית השרת ---
@@ -228,6 +228,14 @@ io.on('connection', (socket) => {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
             io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players, disabledCategories: room.disabledCategories });
+        }
+    });
+
+    // קבלת דיווח ממשחק יחיד לשמירה בהיסטוריה
+    socket.on('logSinglePlayerHistory', (historyRecord) => {
+        if (historyRecord) {
+            globalGameHistory.push(historyRecord);
+            saveHistoryToFile();
         }
     });
 
