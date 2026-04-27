@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const fs = require('fs');
+const nodemailer = require('nodemailer'); // ספריית המיילים החדשה
 
 const app = express();
 const server = http.createServer(app);
@@ -11,75 +11,104 @@ const io = new Server(server);
 app.use(express.static('public'));
 app.use(express.json());
 
-const DB_FILE = 'approved_words.json'; 
-const HISTORY_FILE = 'game_history.json'; 
-
-let aiApprovedWords = {};
-let globalGameHistory = []; 
+const aiApprovedWords = {};
 const rooms = {};
 
-// --- טעינת נתונים מהקבצים בעליית השרת ---
-if (fs.existsSync(DB_FILE)) {
-    try {
-        const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-        for (let cat in data) {
-            aiApprovedWords[cat] = new Set(data[cat]);
+// הגדרת סוכן המיילים (Transporter)
+let transporter;
+if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+    transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: process.env.GMAIL_USER,
+            pass: process.env.GMAIL_APP_PASSWORD
         }
-    } catch (e) { console.error("שגיאה בקריאת קובץ המילים:", e.message); }
+    });
+    console.log("📧 מערכת הדיוור האוטומטית הוגדרה בהצלחה!");
 }
 
-if (fs.existsSync(HISTORY_FILE)) {
+// פונקציה לשליחת דוח המשחק למייל של סבא עופר
+async function sendReportEmail(historyRecord, newWords) {
+    if (!transporter) return;
     try {
-        globalGameHistory = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-    } catch (e) { console.error("שגיאה בקריאת היסטוריית המשחקים:", e.message); }
+        let html = `
+        <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; background-color: #f9f9f9; padding: 20px; border-radius: 10px;">
+            <h2 style="color: #4a90e2;">🏆 תוצאות משחק ארץ עיר</h2>
+            <p><strong>תאריך ושעה:</strong> ${historyRecord.date} | ${historyRecord.time}</p>
+            <p><strong>אות המשחק:</strong> <span style="font-size: 1.5em; color: #f5a623;">${historyRecord.letter}</span></p>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid #ddd; background: white;">
+                <tr style="background-color: #4a90e2; color: white;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">מקום</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">שחקן</th>
+                    <th style="padding: 10px; border: 1px solid #ddd;">ציון</th>
+                </tr>
+        `;
+        
+        historyRecord.players.forEach((p, idx) => {
+            let medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '🔹';
+            html += `<tr>
+                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${medal} ${idx + 1}</td>
+                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;"><strong>${p.name}</strong></td>
+                <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${p.score} נק'</td>
+            </tr>`;
+        });
+        html += `</table>`;
+
+        if (newWords && newWords.length > 0) {
+            html += `<h3 style="color: #27ae60; margin-top: 20px;">🧠 מילים חדשות שאושרו ע"י שופט ה-AI במשחק זה:</h3><ul style="background: white; padding: 15px 30px; border-radius: 5px; border: 1px solid #ddd;">`;
+            newWords.forEach(w => {
+                html += `<li style="margin-bottom: 5px;">${w}</li>`;
+            });
+            html += `</ul>`;
+        }
+
+        html += `</div>`;
+
+        await transporter.sendMail({
+            from: `"ארץ עיר סבא עופר" <${process.env.GMAIL_USER}>`,
+            to: process.env.GMAIL_USER, // נשלח אליך!
+            subject: `🎮 סיכום משחק ארץ עיר הסתיים! (אות: ${historyRecord.letter})`,
+            html: html
+        });
+        console.log(`📧 דוח נשלח למייל עבור משחק באות ${historyRecord.letter} בהצלחה!`);
+    } catch (e) {
+        console.error("❌ שגיאה בשליחת אימייל:", e.message);
+    }
 }
 
-function saveWordsToFile() {
-    try {
-        const dataToSave = {};
-        for (let cat in aiApprovedWords) { dataToSave[cat] = Array.from(aiApprovedWords[cat]); }
-        fs.writeFileSync(DB_FILE, JSON.stringify(dataToSave), 'utf8');
-    } catch (e) {}
-}
-
-function saveHistoryToFile() {
-    try {
-        fs.writeFileSync(HISTORY_FILE, JSON.stringify(globalGameHistory), 'utf8');
-    } catch (e) {}
-}
-
-// --- מנגנון איתור השופט (AI) חסכוני במכסה ---
+// --- מנגנון איתור השופט ---
 let activeModelName = null;
 
 async function initializeGemini() {
     const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : null;
     if (!apiKey) return;
-    
     try {
-        console.log("🔍 מושך רשימת מודלים מגוגל...");
         const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
         const res = await fetch(modelsUrl);
         const data = await res.json();
-        
         if (data.error) throw new Error(data.error.message);
         
         const validModels = data.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'));
-        
-        // בוחר את המודל המהיר והטוב ביותר שקיים מבלי לשלוח אליו שאלת ניסיון כדי לחסוך קווטה!
-        const prefOrder = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-3.1-flash', 'gemini-pro'];
-        
-        for (let pref of prefOrder) {
-            const found = validModels.find(m => m.name.includes(pref));
-            if (found) {
-                activeModelName = found.name.replace('models/', '');
-                console.log(`✅ מודל השופט נבחר בהצלחה: ${activeModelName}`);
+        const sortedModels = validModels.sort((a, b) => {
+            if (a.name.includes('flash')) return -1;
+            if (b.name.includes('flash')) return 1;
+            return 0;
+        });
+
+        for (let m of sortedModels) {
+            const testUrl = `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`;
+            const testRes = await fetch(testUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({contents: [{parts: [{text: "test"}]}]})
+            });
+            const testData = await testRes.json();
+            if (!testData.error) {
+                activeModelName = m.name.replace('models/', '');
+                console.log(`✅ מודל השופט פעיל: ${activeModelName}`);
                 return;
             }
-        }
-        
-        if (validModels.length > 0) {
-            activeModelName = validModels[0].name.replace('models/', '');
-            console.log(`✅ נבחר מודל חלופי: ${activeModelName}`);
         }
     } catch (error) { console.error("שגיאה באתחול מול גוגל:", error.message); }
 }
@@ -112,7 +141,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         
         const prompt = `אתה שופט במשחק 'ארץ עיר'. עליך לבדוק את המילים הבאות שמתחילות באות '${letter}'.
 חוקים:
-1. המילה חייבת להיות קיימת בעברית.
+1. המילה חייבת להיות קיימת בעברית (או שם זר המקובל בעברית).
 2. קבל שגיאות כתיב קלות והורד ניקוד ל-5.
 3. התעלם מה' הידיעה.
 4. אם המילה נכונה ותקינה, הניקוד 10.
@@ -121,24 +150,17 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 רשימה לבדיקה:
 ${promptList}
 
-עליך להחזיר אך ורק קוד JSON. השתמש ב-ID שניתן לך למעלה בתור מפתח ה-JSON.
-דוגמה לתשובה:
-{
-  "results": {
-    "professions": { "points": 10, "reason": "מקצוע תקין" }
-  }
-}`;
-        
-        console.log(`\n🤖 שולח לשופט מילים לבדיקה באות: ${letter}...`);
-        const responseText = await callGeminiAPI(prompt);
+עליך להחזיר אך ורק קוד JSON.
+חובה להשתמש ב-ID המדויק שקיבלת ברשימה בתור המפתח (Key) עבור כל מילה. דוגמה:
+{"results":{"catId_1":{"points":10,"reason":"מקצוע קיים"}}}`;
 
+        const responseText = await callGeminiAPI(prompt);
         let jsonString = responseText;
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (jsonMatch) jsonString = jsonMatch[0];
         
         res.json(JSON.parse(jsonString));
     } catch (error) {
-        console.error("שגיאה במנוע השופט:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -155,7 +177,8 @@ io.on('connection', (socket) => {
             letter: randomLetter,
             disabledCategories: data.disabledCategories || [],
             players: [{ socketId: socket.id, name: data.hostName, isHost: true }],
-            submissions: []
+            submissions: [],
+            newWords: [] // מעקב אחרי מילים חדשות בחדר זה
         };
         
         socket.join(roomId);
@@ -187,6 +210,7 @@ io.on('connection', (socket) => {
         const room = rooms[data.roomId];
         if (room && room.host === socket.id) {
             room.submissions = [];
+            room.newWords = []; // איפוס מילים חדשות לתחילת משחק
             io.to(data.roomId).emit('gameStarted', { letter: room.letter, disabledCategories: room.disabledCategories });
         }
     });
@@ -231,41 +255,29 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (room && room.host === socket.id) {
             room.submissions = [];
+            room.newWords = [];
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
             io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players, disabledCategories: room.disabledCategories });
         }
     });
 
-    // קבלת דיווח ממשחק יחיד לשמירה בהיסטוריה
-    socket.on('logSinglePlayerHistory', (historyRecord) => {
-        if (historyRecord) {
-            globalGameHistory.push(historyRecord);
-            saveHistoryToFile();
+    // כעת מקבל דיווח מלא ממשחק יחיד ומפעיל אימייל
+    socket.on('logSinglePlayerHistory', (data) => {
+        if (data.historyRecord) {
+            sendReportEmail(data.historyRecord, data.newAiWords || []);
         }
     });
 
-    // --- אזור הניהול ---
     socket.on('logApprovedWord', (data) => {
         if (!aiApprovedWords[data.category]) aiApprovedWords[data.category] = new Set();
         aiApprovedWords[data.category].add(data.word);
-        saveWordsToFile();
-    });
-
-    socket.on('getAdminData', () => {
-        const formattedWords = {};
-        for (let cat in aiApprovedWords) { formattedWords[cat] = Array.from(aiApprovedWords[cat]); }
-        socket.emit('receiveAdminData', { words: formattedWords, history: globalGameHistory });
-    });
-
-    socket.on('clearCategoryWords', (category) => {
-        if (aiApprovedWords[category]) { aiApprovedWords[category].clear(); saveWordsToFile(); }
-    });
-
-    socket.on('clearGameHistory', () => {
-        globalGameHistory = [];
-        saveHistoryToFile();
-        socket.emit('receiveAdminData', { words: {}, history: globalGameHistory });
+        
+        // רישום המילה עבור המשחק הקבוצתי הספציפי כדי שתופיע במייל
+        if (data.roomId && rooms[data.roomId]) {
+            if (!rooms[data.roomId].newWords) rooms[data.roomId].newWords = [];
+            rooms[data.roomId].newWords.push(`${data.categoryLabel}: ${data.word}`);
+        }
     });
 
     socket.on('disconnect', () => {
@@ -276,9 +288,8 @@ io.on('connection', (socket) => {
                 const isHost = room.players[pIndex].isHost;
                 room.players.splice(pIndex, 1);
                 io.to(roomId).emit('updatePlayers', room.players);
-                if (room.players.length === 0) {
-                    delete rooms[roomId];
-                } else if (isHost) {
+                if (room.players.length === 0) delete rooms[roomId];
+                else if (isHost) {
                     room.players[0].isHost = true;
                     room.host = room.players[0].socketId;
                     io.to(room.players[0].socketId).emit('roomJoined', { roomId, letter: room.letter, disabledCategories: room.disabledCategories, isHost: true });
@@ -315,8 +326,9 @@ function processAndSendResults(roomId) {
         letter: room.letter,
         players: leaderboard.map(p => ({ name: p.name, score: p.finalScore }))
     };
-    globalGameHistory.push(historyRecord);
-    saveHistoryToFile();
+
+    // שליחת אימייל אוטומטי למנהל
+    sendReportEmail(historyRecord, room.newWords || []);
 
     io.to(roomId).emit('gameOver', { leaderboard, historyRecord });
 }
