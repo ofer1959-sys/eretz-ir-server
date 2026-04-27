@@ -12,7 +12,7 @@ app.use(express.static('public'));
 app.use(express.json());
 
 const DB_FILE = 'approved_words.json'; 
-const HISTORY_FILE = 'game_history.json';
+const HISTORY_FILE = 'game_history.json'; 
 
 let aiApprovedWords = {};
 let globalGameHistory = []; 
@@ -48,7 +48,7 @@ function saveHistoryToFile() {
     } catch (e) {}
 }
 
-// --- מנגנון איתור השופט (AI) ---
+// --- מנגנון איתור השופט (AI) חסכוני במכסה ---
 let activeModelName = null;
 
 async function initializeGemini() {
@@ -56,6 +56,7 @@ async function initializeGemini() {
     if (!apiKey) return;
     
     try {
+        console.log("🔍 מושך רשימת מודלים מגוגל...");
         const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
         const res = await fetch(modelsUrl);
         const data = await res.json();
@@ -64,25 +65,21 @@ async function initializeGemini() {
         
         const validModels = data.models.filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'));
         
-        const sortedModels = validModels.sort((a, b) => {
-            if (a.name.includes('flash')) return -1;
-            if (b.name.includes('flash')) return 1;
-            return 0;
-        });
-
-        for (let m of sortedModels) {
-            const testUrl = `https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`;
-            const testRes = await fetch(testUrl, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({contents: [{parts: [{text: "test"}]}]})
-            });
-            const testData = await testRes.json();
-            if (!testData.error) {
-                activeModelName = m.name.replace('models/', '');
-                console.log(`✅ מודל השופט פעיל: ${activeModelName}`);
+        // בוחר את המודל המהיר והטוב ביותר שקיים מבלי לשלוח אליו שאלת ניסיון כדי לחסוך קווטה!
+        const prefOrder = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-3.1-flash', 'gemini-pro'];
+        
+        for (let pref of prefOrder) {
+            const found = validModels.find(m => m.name.includes(pref));
+            if (found) {
+                activeModelName = found.name.replace('models/', '');
+                console.log(`✅ מודל השופט נבחר בהצלחה: ${activeModelName}`);
                 return;
             }
+        }
+        
+        if (validModels.length > 0) {
+            activeModelName = validModels[0].name.replace('models/', '');
+            console.log(`✅ נבחר מודל חלופי: ${activeModelName}`);
         }
     } catch (error) { console.error("שגיאה באתחול מול גוגל:", error.message); }
 }
@@ -112,27 +109,36 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         if (!items || items.length === 0) return res.json({ results: {} });
 
         let promptList = items.map(item => `קטגוריה: ${item.categoryLabel} (ID: ${item.catId}) | מילה לבדיקה: "${item.answer}"`).join('\n');
-        const prompt = `אתה שופט במשחק 'ארץ עיר'. בדוק את המילים הבאות שמתחילות באות '${letter}'.
+        
+        const prompt = `אתה שופט במשחק 'ארץ עיר'. עליך לבדוק את המילים הבאות שמתחילות באות '${letter}'.
 חוקים:
 1. המילה חייבת להיות קיימת בעברית.
 2. קבל שגיאות כתיב קלות והורד ניקוד ל-5.
 3. התעלם מה' הידיעה.
 4. אם המילה נכונה ותקינה, הניקוד 10.
-5. אחרת, 0.
+5. אם המילה לא נכונה או לא קיימת, 0.
 
-רשימה:
+רשימה לבדיקה:
 ${promptList}
 
-החזר רק JSON:
-{"results":{"catId_1":{"points":10,"reason":""}}}`;
-
+עליך להחזיר אך ורק קוד JSON. השתמש ב-ID שניתן לך למעלה בתור מפתח ה-JSON.
+דוגמה לתשובה:
+{
+  "results": {
+    "professions": { "points": 10, "reason": "מקצוע תקין" }
+  }
+}`;
+        
+        console.log(`\n🤖 שולח לשופט מילים לבדיקה באות: ${letter}...`);
         const responseText = await callGeminiAPI(prompt);
+
         let jsonString = responseText;
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (jsonMatch) jsonString = jsonMatch[0];
         
         res.json(JSON.parse(jsonString));
     } catch (error) {
+        console.error("שגיאה במנוע השופט:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
@@ -302,7 +308,6 @@ function processAndSendResults(roomId) {
 
     leaderboard.sort((a, b) => b.finalScore !== a.finalScore ? b.finalScore - a.finalScore : a.time - b.time);
 
-    // שמירת ההיסטוריה הגלובלית לקובץ
     const dateObj = new Date();
     const historyRecord = {
         date: dateObj.toLocaleDateString('he-IL'),
