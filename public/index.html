@@ -3,76 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ארץ עיר של סבא עופר- שיפוט AI</title>
+    <title>ארץ עיר - סבא עופר</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         :root { --primary: #4a90e2; --secondary: #f5a623; --success: #7ed321; --danger: #d0021b; --bg: #f0f4f8; --text: #333; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; direction: rtl;}
-        .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; margin: 20px 0; display: flex; flex-direction: column; position: relative;}
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; direction: rtl;}
+        .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; }
         .screen { display: none; flex-direction: column; } .active { display: flex; }
-        input[type="text"] { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box; }
-        button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; width: 100%; margin-top: 10px; }
+        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; }
+        button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; margin-top: 10px; }
         .btn-primary { background: var(--primary); color: white; }
-        .btn-success { background: var(--success); color: white; }
-        .btn-home { background: #7f8c8d; color: white; margin-top: 15px;}
-        .timer { font-size: 1.5rem; color: #666; margin-bottom: 1rem; font-weight: bold; }
-        .category-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-        .category-row label { width: 120px; font-weight: bold; text-align: right; }
-        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .btn-home { background: #95a5a6; color: white; margin-top: 20px; }
+        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .leaderboard-table th, .leaderboard-table td { padding: 10px; border: 1px solid #ddd; text-align: center; }
-        .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-top: 10px; }
+        .category-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .category-row label { width: 120px; font-weight: bold; text-align: right; }
     </style>
 </head>
 <body>
-
-<div id="live-notifications"></div>
 
 <div class="container">
     <div id="welcome" class="screen active">
         <h1>ארץ עיר של סבא עופר - שיפוט AI</h1>
         <input type="text" id="player-name" placeholder="השם שלך...">
-        <div id="category-selection-box" style="background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin: 20px 0;">
-            <p>בטל קטגוריות שאינך רוצה:</p>
-            <div class="checkbox-grid">
-                <label><input type="checkbox" class="cat-disable-cb" value="localities"> יישוב</label>
-                <label><input type="checkbox" class="cat-disable-cb" value="boys"> שם בן</label>
-                <label><input type="checkbox" class="cat-disable-cb" value="girls"> שם בת</label>
-                <label><input type="checkbox" class="cat-disable-cb" value="professions"> מקצוע</label>
-                <label><input type="checkbox" class="cat-disable-cb" value="foods"> מאכל</label>
-                <label><input type="checkbox" class="cat-disable-cb" value="countries"> מדינה</label>
-            </div>
-        </div>
-        <button class="btn-primary" onclick="startSoloGame()">שחק לבד</button>
-        <button class="btn-success" onclick="createRoom()" style="background:#8e44ad">ארח משחק קבוצתי</button>
+        <button class="btn-primary" onclick="startSoloGame()">שחק נגד השעון</button>
+        <button class="secret-btn" onclick="promptAdmin()" style="opacity: 0.2; margin-top: 50px;">סיסמה</button>
     </div>
 
     <div id="game-screen" class="screen">
-        <div class="timer" id="timer-display">זמן: 00:00</div>
-        <h2 id="game-letter-header">האות היא: א</h2>
+        <h2 id="game-letter-header">האות היא:</h2>
         <div id="categories-container"></div>
         <button class="btn-primary" onclick="submitGame()">סיימתי!</button>
     </div>
 
     <div id="results" class="screen">
         <h2>תוצאות המשחק</h2>
-        <table class="leaderboard-table">
-            <thead><tr><th>שחקן</th><th>ניקוד</th><th>זמן</th></tr></thead>
-            <tbody id="leaderboard-body"></tbody>
-        </table>
-        <div id="answers-comparison-container" style="margin-top: 20px;"></div>
+        <div id="answers-comparison-container"></div>
+        <button class="btn-primary" onclick="showSummary()">סיום וקבלת התוצאות 📊</button>
+        <button class="btn-home" onclick="location.reload()">חזור למסך הבית 🏠</button>
+    </div>
+
+    <div id="summary-screen" class="screen">
+        <h2>🏆 סיכום המשחקים שלך</h2>
+        <div id="summary-tables"></div>
         <button class="btn-primary" onclick="location.reload()">שחק שוב</button>
         <button class="btn-home" onclick="location.reload()">חזור למסך הבית 🏠</button>
+    </div>
+
+    <div id="admin-screen" class="screen">
+        <h2>🛠️ מתחם מנהל</h2>
+        <div id="admin-history"></div>
+        <button class="btn-primary" onclick="location.reload()">חזור</button>
+        <button class="btn-danger" style="background:red; color:white;" onclick="clearHistory()">מחק הכל</button>
     </div>
 </div>
 
 <script>
     const RAW_DATA = {
-        localities: `גבעתיים,תל אביב,ירושלים,חיפה,ראשון לציון,פתח תקווה,אשדוד,נתניה,באר שבע,חולון,בני ברק,רמת גן,אשקלון,רחובות,בת ים,בית שמש,הרצליה,כפר סבא,חדרה,לוד,רעננה,מודיעין,רמלה,גבעת שמואל,הוד השרון`,
-        boys: `זאביק,למך,גרישה,עופר,דוד,יוסי,אברהם,יצחק,יעקב,משה,אהרון,יוסף,בנימין`,
-        girls: `אזמרלדה,אלה,ליה,דינה,דנה,שרה,רבקה,רחל,לאה,תמר,נועה,איילת`,
-        professions: `אפסנאי,רפתן,לבלר,לוביסט,גבאי,בוטניקאי,רופא,עורך דין,מתכנת,מורה,מהנדס`,
-        foods: `אפרסק,תפוח,בננה,עגבניה,מלפפון,לחם,גבינה,זית,אורז,פסטה`,
-        countries: `זאיר,ישראל,צרפת,אנגליה,ארה"ב,גרמניה,איטליה,ספרד,קנדה,ברזיל`
+        localities: `גבעתיים,תל אביב,ירושלים,חיפה,ראשון לציון,פתח תקווה,אשדוד,נתניה,באר שבע,חולון,בני ברק,רמת גן,אשקלון,רחובות,בת ים,בית שמש,הרצליה,כפר סבא,חדרה,לוד,רעננה,מודיעין,רמלה`,
+        boys: `זאביק,למך,גרישה,עופר,דוד,אברהם,משה,יעקב,יצחק`,
+        girls: `אזמרלדה,אלה,ליה,דינה,דנה,שרה,רבקה`,
+        professions: `אפסנאי,רפתן,לבלר,לוביסט,גבאי,בוטניקאי,רופא,עורך דין,מתכנת`,
+        foods: `אפרסק,תפוח,בננה,עגבניה,מלפפון,לחם,גבינה`,
+        countries: `זאיר,ישראל,צרפת,ארה"ב,אנגליה,גרמניה`
     };
 
     const CATEGORIES = [
@@ -84,97 +77,112 @@
         { id: 'professions', label: 'מקצוע' }
     ];
 
-    let activeCategories = [], currentLetter = '', startTime, timerInterval, myName = '', playerAnswers = {};
+    let currentLetter = '', myName = '', playerAnswers = {};
     const socket = io();
 
     function startSoloGame() {
         myName = document.getElementById('player-name').value.trim() || "שחקן";
-        const disabled = Array.from(document.querySelectorAll('.cat-disable-cb:checked')).map(cb => cb.value);
-        activeCategories = CATEGORIES.filter(c => !disabled.includes(c.id));
         currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random()*22)];
-        showGameFields();
-    }
-
-    function showGameFields() {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById('game-screen').classList.add('active');
         document.getElementById('game-letter-header').innerText = "האות היא: " + currentLetter;
         const container = document.getElementById('categories-container');
         container.innerHTML = '';
-        activeCategories.forEach(cat => {
+        CATEGORIES.forEach(cat => {
             container.innerHTML += `<div class="category-row"><label>${cat.label}</label><input type="text" id="input-${cat.id}"></div>`;
         });
-        startTime = Date.now();
-        timerInterval = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            document.getElementById('timer-display').innerText = `זמן: ${elapsed} שניות`;
-        }, 1000);
     }
 
     async function submitGame() {
-        clearInterval(timerInterval);
-        const timeInSeconds = Math.floor((Date.now() - startTime) / 1000);
-        let itemsToJudge = [];
         let score = 0;
+        playerAnswers = {};
+        let itemsToJudge = [];
 
-        for (let cat of activeCategories) {
+        for (let cat of CATEGORIES) {
             const val = document.getElementById(`input-${cat.id}`).value.trim();
-            const words = (RAW_DATA[cat.id] || "").split(',');
-            
-            if (words.includes(val) && val.startsWith(currentLetter)) {
-                playerAnswers[cat.label] = { val, points: 10, feedback: "במאגר המקומי" };
+            const localList = RAW_DATA[cat.id].split(',');
+            if (localList.includes(val) && val.startsWith(currentLetter)) {
+                playerAnswers[cat.label] = { val, points: 10, feedback: "מאושר מקומית" };
                 score += 10;
             } else if (val.startsWith(currentLetter)) {
                 itemsToJudge.push({ catId: cat.id, categoryLabel: cat.label, answer: val });
-                playerAnswers[cat.label] = { val, points: 0, feedback: "נשלח ל-AI..." };
+                playerAnswers[cat.label] = { val, points: 0, feedback: "בדיקת AI..." };
             } else {
-                playerAnswers[cat.label] = { val, points: 0, feedback: "אות שגויה" };
+                playerAnswers[cat.label] = { val, points: 0, feedback: "אות שגויה/ריק" };
             }
         }
 
         if (itemsToJudge.length > 0) {
-            try {
-                const res = await fetch('/api/ask-judge-batch', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ letter: currentLetter, items: itemsToJudge })
-                });
-                const data = await res.json();
-                for (let item of itemsToJudge) {
-                    const aiRes = data.results[item.catId];
-                    if (aiRes) {
-                        playerAnswers[item.categoryLabel].points = aiRes.points;
-                        playerAnswers[item.categoryLabel].feedback = aiRes.reason;
-                        score += aiRes.points;
-                    }
-                }
-            } catch (e) { console.error("AI error", e); }
+            const res = await fetch('/api/ask-judge-batch', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ letter: currentLetter, items: itemsToJudge })
+            });
+            const data = await res.json();
+            for (let item of itemsToJudge) {
+                const ai = data.results[item.catId];
+                if (ai) { playerAnswers[item.categoryLabel].points = ai.points; playerAnswers[item.categoryLabel].feedback = ai.reason; score += ai.points; }
+            }
         }
 
-        const historyRecord = {
-            date: new Date().toLocaleDateString('he-IL'),
-            time: new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}),
-            letter: currentLetter,
-            players: [{ name: myName, score: score }]
-        };
+        const record = { date: new Date().toLocaleDateString('he-IL'), time: new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}), letter: currentLetter, players: [{ name: myName, score }] };
+        socket.emit('logSinglePlayerHistory', { historyRecord: record, fullAnswers: playerAnswers });
+        
+        // שמירה לסיכום המצטבר
+        let history = JSON.parse(sessionStorage.getItem('myHistory') || '[]');
+        history.push(record);
+        sessionStorage.setItem('myHistory', JSON.stringify(history));
 
-        socket.emit('logSinglePlayerHistory', { historyRecord, fullAnswers: playerAnswers });
-        showFinalResults(score, timeInSeconds);
+        showResults(score);
     }
 
-    function showFinalResults(score, time) {
+    function showResults(score) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById('results').classList.add('active');
-        document.getElementById('leaderboard-body').innerHTML = `<tr><td>${myName}</td><td>${score}</td><td>${time} שנ'</td></tr>`;
-        
         let html = `<table class="leaderboard-table"><thead><tr><th>קטגוריה</th><th>תשובה</th><th>נקודות</th><th>נימוק</th></tr></thead><tbody>`;
         for (let cat in playerAnswers) {
-            const ans = playerAnswers[cat];
-            html += `<tr><td>${cat}</td><td>${ans.val}</td><td>${ans.points}</td><td>${ans.feedback}</td></tr>`;
+            const a = playerAnswers[cat];
+            html += `<tr><td>${cat}</td><td>${a.val}</td><td>${a.points}</td><td>${a.feedback}</td></tr>`;
         }
         html += "</tbody></table>";
         document.getElementById('answers-comparison-container').innerHTML = html;
     }
+
+    function showSummary() {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById('summary-screen').classList.add('active');
+        const history = JSON.parse(sessionStorage.getItem('myHistory') || '[]');
+        let html = `<table class="leaderboard-table"><thead><tr><th>תאריך</th><th>אות</th><th>ציון</th></tr></thead><tbody>`;
+        let total = 0;
+        history.forEach(r => {
+            html += `<tr><td>${r.date} ${r.time}</td><td>${r.letter}</td><td>${r.players[0].score}</td></tr>`;
+            total += r.players[0].score;
+        });
+        html += `</tbody></table><h3>ממוצע: ${(total/history.length).toFixed(1)}</h3>`;
+        document.getElementById('summary-tables').innerHTML = html;
+    }
+
+    function promptAdmin() {
+        if (prompt("סיסמה:") === "99787") {
+            socket.emit('getAdminData');
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('admin-screen').classList.add('active');
+        }
+    }
+
+    socket.on('receiveAdminData', (data) => {
+        let local = JSON.parse(localStorage.getItem('adminVault') || '[]');
+        data.history.forEach(h => { if(!local.find(l => l.date===h.date && l.time===h.time)) local.push(h); });
+        localStorage.setItem('adminVault', JSON.stringify(local));
+        socket.emit('restoreAdminData', { history: local });
+
+        let html = `<table class="leaderboard-table"><thead><tr><th>זמן</th><th>אות</th><th>שחקנים</th></tr></thead><tbody>`;
+        local.reverse().forEach(h => {
+            html += `<tr><td>${h.date}<br>${h.time}</td><td>${h.letter}</td><td>${h.players.map(p=>`${p.name}(${p.score})`).join(', ')}</td></tr>`;
+        });
+        document.getElementById('admin-history').innerHTML = html + "</tbody></table>";
+    });
+
+    function clearHistory() { if(confirm("למחוק?")) { localStorage.removeItem('adminVault'); socket.emit('clearGameHistory'); } }
 </script>
 </body>
 </html>
