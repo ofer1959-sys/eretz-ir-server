@@ -22,21 +22,20 @@ const emailPass = (process.env.EMAIL_PASS || "").trim();
 
 console.log("=== SERVER STARTUP ===");
 console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
-console.log("✅ שופט AI פעיל: gemini-3.1-flash-lite-preview");
+console.log("✅ שופט AI פעיל: gemini-2.5-flash (גרסה יציבה ומהירה)");
 
 // ==========================================
-// הגדרת מערכת הדיוור - מעקף לחסימת הרשת ב-Render (פורט 587)
+// הגדרת מערכת הדיוור - שימוש בניתוב האוטומטי של Gmail
 // ==========================================
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // חובה לשים false כשמשתמשים בפורט 587
-    requireTLS: true,
+    service: 'gmail', // נותן לספרייה לנהל את הפורטים והחיבורים בצורה חכמה
     auth: {
         user: emailUser,
         pass: emailPass
     },
-    family: 4 // הפקודה שמצילה אותנו מהחסימה ב-Render
+    tls: {
+        rejectUnauthorized: false // מונע שגיאות אבטחה קטנוניות בחיבור משרת חינמי
+    }
 });
 
 if (emailUser && emailPass) {
@@ -44,7 +43,7 @@ if (emailUser && emailPass) {
         if (error) {
             console.error("שגיאה בחיבור למייל:", error.message);
         } else {
-            console.log("📧 מערכת הדיוור האוטומטית מוכנה.");
+            console.log("📧 מערכת הדיוור האוטומטית מוכנה ומחוברת לגוגל!");
         }
     });
 } else {
@@ -54,10 +53,10 @@ if (emailUser && emailPass) {
 const rooms = {};
 
 // ==========================================
-// פנייה לג'מיני
+// פנייה לג'מיני 2.5 המהיר
 // ==========================================
 async function askGeminiDirectly(promptText) {
-    const url = `[https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=$){apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -91,7 +90,7 @@ app.get('/api/test-gemini', async (req, res) => {
 });
 
 // ==========================================
-// שופט ה-AI
+// שופט ה-AI (בדיקה מרוכזת + הגבלת הסבר ל-12 מילים)
 // ==========================================
 app.post('/api/ask-judge-batch', async (req, res) => {
     const { letter, items } = req.body;
@@ -131,6 +130,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         }`;
         
         let isResolved = false;
+        // 25 שניות המתנה כדי למנוע את השגיאה של עומס ברשת
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
         }, 25000));
@@ -151,7 +151,6 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results });
         }
 
-        // התיקון הקריטי: חסין לתקלות העתק-הדבק של GitHub
         let cleanText = response.text.split('```json').join('').split('```').join('').trim();
         res.json(JSON.parse(cleanText));
         
@@ -190,6 +189,7 @@ function calculateAndSendResults(roomId, isAppeal = false) {
 
     io.to(roomId).emit('gameOver', room.players);
 
+    // שליחת אימייל עם תוצאות
     if (emailUser && emailPass && (!room.emailSent || isAppeal)) {
         room.emailSent = true; 
         
