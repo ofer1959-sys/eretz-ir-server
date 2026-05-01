@@ -171,12 +171,11 @@
             });
         } catch(e) {}
 
-        // בדיקה אם השחקן נכנס דרך קישור הזמנה של וואטסאפ עם קוד חדר
         const urlParams = new URLSearchParams(window.location.search);
         const roomParam = urlParams.get('room');
         if (roomParam) {
             document.getElementById('room-code').value = roomParam.toUpperCase();
-            showJoinSection(); // פותח את אזור ההצטרפות אוטומטית לשחקן המוזמן
+            showJoinSection(); 
         }
     });
 
@@ -237,9 +236,6 @@
 
     function getDisabledCategories() { return Array.from(document.querySelectorAll('.cat-disable-cb:checked')).map(cb => cb.value); }
 
-    // ==========================================
-    // הצגת שחקנים מחוברים
-    // ==========================================
     function updatePlayersList(players) {
         const list = document.getElementById('players-list');
         list.innerHTML = '';
@@ -253,12 +249,8 @@
         updatePlayersList(players);
     });
 
-    // ==========================================
-    // פונקציות וואטסאפ מתוקנות עם URL
-    // ==========================================
     function shareRoomWhatsApp() {
         const roomToShare = document.getElementById('display-room-code').innerText || currentRoom;
-        // יצירת הקישור עם קוד החדר בתוכו!
         const link = window.location.origin + window.location.pathname + '?room=' + roomToShare;
         const msg = `בואו לשחק איתי ארץ עיר!\nקוד החדר: *${roomToShare}*\nכנסו להצטרף: ${link}`;
         window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
@@ -311,7 +303,6 @@
         isMultiplayerMode = true; isHost = false;
         sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'false'); sessionStorage.setItem('currentRoom', room);
         
-        // מחיקת הפרמטר מה-URL כדי שלא יפריע להצטרפות הבאה או רענון
         window.history.replaceState({}, document.title, window.location.pathname);
 
         socket.emit('joinRoom', { roomId: room, playerName: myName, isHostClaim: false });
@@ -413,6 +404,11 @@
 
         if (isMultiplayerMode) {
             document.getElementById('wait-for-others-msg').style.display = 'block';
+            if (isHost) {
+                document.getElementById('host-updates').style.display = 'block';
+                document.getElementById('force-end-btn').style.display = 'block';
+                document.getElementById('host-updates-list').innerText = "ממתין לעדכון משרת המשחק...";
+            }
             socket.emit('submitScore', { roomId: currentRoom, totalScore: myTotalPoints, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
         } else {
             showFinalResults([{ name: myName, score: myTotalPoints, finalScore: myTotalPoints, time: lastTimeInSeconds, answers: playerAnswers }], { name: myName, answers: playerAnswers });
@@ -452,8 +448,8 @@
                             <tr style="background-color: #4a90e2; color: white;"><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן (שניות)</th></tr>`;
         
         leaderboard.forEach((p, idx) => {
-            const finalSc = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
-            emailHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color: green; font-weight: bold;">${finalSc}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
+            const finalDisp = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+            emailHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color: green; font-weight: bold;">${finalDisp}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
         });
         emailHtml += `</table>`;
 
@@ -494,7 +490,10 @@
         showScreen('results');
         document.getElementById('winner-announcement').innerText = leaderboard.length > 1 ? `המנצח הוא ${leaderboard[0].name}!` : `סיימת!`;
         const lb = document.getElementById('leaderboard-body'); lb.innerHTML = '';
-        leaderboard.forEach((p, i) => { lb.innerHTML += `<tr><td>${i+1}</td><td>${p.name}</td><td>${p.finalScore || p.score}</td><td>${p.time === 999 ? 'פרש' : p.time + " שנ'"}</td></tr>`; });
+        leaderboard.forEach((p, i) => { 
+            let dispScore = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+            lb.innerHTML += `<tr><td>${i+1}</td><td>${p.name}</td><td>${dispScore}</td><td>${p.time === 999 ? 'פרש' : p.time + " שנ'"}</td></tr>`; 
+        });
         
         const comp = document.getElementById('answers-comparison-container');
         let tableHtml = `<table class="leaderboard-table comparison-table"><thead><tr><th>קטגוריה</th><th>התשובה שלי</th>`;
