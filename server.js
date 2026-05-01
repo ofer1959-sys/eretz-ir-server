@@ -132,20 +132,27 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 });
 
 // ==========================================
-// ניהול ניקוד ותוצאות (ללא שליחת מייל)
+// ניהול ניקוד ותוצאות 
 // ==========================================
 function calculateAndSendResults(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     
-    const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
+    // מוצא את הזמן המינימלי, אך מתעלם ממי שלא השלים (999) או זמן 0
+    const validTimes = room.players.filter(p => p.time < 999 && p.time > 0).map(p => p.time);
+    const minTime = validTimes.length > 0 ? Math.min(...validTimes) : 0;
+    
     room.players.forEach(p => {
-        let score = p.baseScore || 0; 
+        let score = p.baseScore !== undefined ? p.baseScore : 0; 
+        
         if (minTime > 0 && minTime !== Infinity && p.time < 999) {
             const excessRatio = (p.time - minTime) / minTime;
             if (excessRatio > 0.50) {
-                const penalties = Math.floor(excessRatio / 0.10);
-                score -= (penalties * 5);
+                // קנס עדין: 2 נקודות על כל חריגה של 20% מהזמן, מקסימום 15 נקודות קנס סך הכל.
+                const penalties = Math.floor(excessRatio / 0.20);
+                let deduction = penalties * 2;
+                if (deduction > 15) deduction = 15;
+                score -= deduction;
             }
         }
         p.finalScore = Number(Math.max(0, score).toFixed(2));
@@ -212,15 +219,6 @@ io.on('connection', (socket) => {
             if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
         }
     });
-
-    socket.on('submitAppeal', ({ roomId, playerName, newTotalScore, answers }) => {
-        const room = rooms[roomId];
-        if (!room) return;
-        const player = room.players.find(p => p.name === playerName);
-        if (player) { player.baseScore = newTotalScore; player.answers = answers; calculateAndSendResults(roomId); }
-    });
-
-    socket.on('announceAppeal', ({ roomId, playerName }) => { io.to(roomId).emit('appealStarted', playerName); });
 
     socket.on('forceEndGame', (data) => {
         const room = rooms[data.roomId];
