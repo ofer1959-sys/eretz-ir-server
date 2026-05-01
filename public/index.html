@@ -222,13 +222,30 @@
     function showJoinSection() { document.getElementById('btn-show-join').style.display = 'none'; document.getElementById('join-section').style.display = 'block'; document.getElementById('category-selection-box').style.display = 'none'; }
     function getDisabledCategories() { return Array.from(document.querySelectorAll('.cat-disable-cb:checked')).map(cb => cb.value); }
 
+    // ==========================================
+    // פונקציות וואטסאפ (אלו ששכחתי להוסיף קודם!)
+    // ==========================================
+    function shareRoomWhatsApp() {
+        const msg = `בואו לשחק איתי ארץ עיר!\nקוד החדר: *${currentRoom}*\nכנסו לכאן: ${window.location.href}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    function shareResultsWhatsApp() {
+        let msg = `*תוצאות ארץ עיר - אות ${currentLetter}*\n\n`;
+        const rows = document.querySelectorAll('#leaderboard-body tr');
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td');
+            msg += `${cols[0].innerText}. ${cols[1].innerText} - ${cols[2].innerText} נק' (${cols[3].innerText})\n`;
+        });
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
     function startSoloGame() {
         myName = document.getElementById('player-name').value.trim();
         if (!myName) return alert("הכנס שם!");
         let disabled = getDisabledCategories();
         if (disabled.length >= CATEGORIES.length) return alert("חייבים להשאיר לפחות קטגוריה אחת!");
         
-        // שמירת הנתונים בזיכרון המקומי
         localStorage.setItem('eretzIrName', myName);
         localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
         
@@ -242,7 +259,6 @@
         if (!myName) return alert("הכנס שם!");
         let disabled = getDisabledCategories();
         
-        // שמירת הנתונים בזיכרון המקומי
         localStorage.setItem('eretzIrName', myName);
         localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
         
@@ -256,7 +272,7 @@
         if (!nameInput || !room) return alert("הכנס שם וקוד חדר!");
         
         myName = nameInput; 
-        localStorage.setItem('eretzIrName', myName); // שמירת השם
+        localStorage.setItem('eretzIrName', myName);
 
         isMultiplayerMode = true; isHost = false;
         sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'false'); sessionStorage.setItem('currentRoom', room);
@@ -369,6 +385,9 @@
         socket.emit('forceEndGame', { roomId: currentRoom, forceHostSubmit: false });
     }
 
+    // ==========================================
+    // שליחת מייל עם פירוט תשובות מלא לכל שחקן
+    // ==========================================
     let lastEmailSentTime = 0; 
     function sendResultsEmail(leaderboard) {
         if (isMultiplayerMode && !isHost) return; 
@@ -377,17 +396,43 @@
         if (now - lastEmailSentTime < 10000) return; 
         lastEmailSentTime = now;
 
-        let tableHtml = `<table border="1" cellpadding="8" cellspacing="0" style="width: 100%; max-width: 600px; text-align: right; border-collapse: collapse; font-family: sans-serif;" dir="rtl">
+        // בניית טבלת סיכום
+        let emailHtml = `<h3 style="color:#4a90e2; text-align: right;" dir="rtl">טבלת מובילים</h3>
+                         <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; max-width: 600px; text-align: right; border-collapse: collapse; font-family: sans-serif;" dir="rtl">
                             <tr style="background-color: #4a90e2; color: white;"><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן (שניות)</th></tr>`;
         
         leaderboard.forEach((p, idx) => {
             const finalSc = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
-            tableHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color: green; font-weight: bold;">${finalSc}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
+            emailHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color: green; font-weight: bold;">${finalSc}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
         });
-        tableHtml += `</table>`;
+        emailHtml += `</table>`;
 
-        emailjs.send("service_84tw6fs", "template_a1o8lid", { letter: currentLetter, winner_name: leaderboard[0].name, results_table: tableHtml })
-            .then(() => console.log('📧 מייל נשלח בהצלחה דרך EmailJS!'))
+        // בניית תת-טבלאות עם הפירוט של כל שחקן!
+        emailHtml += `<br><h3 style="color:#f5a623; text-align: right;" dir="rtl">פירוט תשובות לכל שחקן</h3>`;
+        
+        leaderboard.forEach(p => {
+            emailHtml += `<h4 style="margin-bottom: 5px; text-align: right;" dir="rtl">התשובות של: <span style="color:#8e44ad">${p.name}</span></h4>`;
+            emailHtml += `<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; max-width: 600px; text-align: right; border-collapse: collapse; font-family: sans-serif; font-size: 0.9rem;" dir="rtl">
+                            <tr style="background-color: #f9f9f9;"><th>קטגוריה</th><th>תשובה</th><th>ניקוד</th><th>הערת שופט</th></tr>`;
+            
+            if (p.answers && Object.keys(p.answers).length > 0) {
+                activeCategories.forEach(cat => {
+                    let ans = p.answers[cat.label];
+                    if (ans) {
+                        let fdbk = ans.feedback ? ans.feedback : '';
+                        emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>${ans.val}</td><td style="color:green; font-weight:bold;">${ans.points}</td><td style="color:#666;">${fdbk}</td></tr>`;
+                    } else {
+                        emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>-</td><td>0</td><td></td></tr>`;
+                    }
+                });
+            } else {
+                emailHtml += `<tr><td colspan="4">לא הוגשו תשובות (פרש או נגמר הזמן)</td></tr>`;
+            }
+            emailHtml += `</table><br>`;
+        });
+
+        emailjs.send("service_84tw6fs", "template_a1o8lid", { letter: currentLetter, winner_name: leaderboard[0].name, results_table: emailHtml })
+            .then(() => console.log('📧 מייל מפורט נשלח בהצלחה דרך EmailJS!'))
             .catch(err => console.error('שגיאה בשליחת המייל...', err));
     }
 
