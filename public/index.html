@@ -35,16 +35,23 @@
         .leaderboard-table th { background-color: var(--primary); color: white; }
         .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
         .comparison-table { min-width: 100%; font-size: 0.9rem; }
-        .comparison-table th { background-color: #34495e; }
+        .comparison-table th { background-color: #34495e; color: white; }
         .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
         .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; text-align: right; font-size: 1rem; margin-top: 10px; }
         .checkbox-grid label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
         .checkbox-grid input[type="checkbox"] { width: auto; transform: scale(1.2); margin: 0; }
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
+        
+        /* עיצוב להודעה הצפה */
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+        @keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeout { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
     </style>
 </head>
 <body>
+
+<div id="toast-container"></div>
 
 <div class="container">
     <div id="welcome" class="screen active">
@@ -135,16 +142,20 @@
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
+            <!-- כפתור שליחת מייל מצטבר למארח -->
+            <button id="btn-send-email" class="btn-host" style="display:none;" onclick="sendCumulativeEmail()"></button>
             <button class="btn-success" onclick="shareResultsWhatsApp()">שתף תוצאות ב-WhatsApp 📱</button>
         </div>
     </div>
 </div>
 
 <script>
-    // אתחול EmailJS
+    // אתחול EmailJS וניהול זיכרון משחקים מצטבר
     emailjs.init("6haOOG3JbyY2rkE4x");
+    window.gameSessionHistory = []; // כאן נאגור את כל המשחקים של היום!
 
     function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+    
     function showJoinSection() { 
         document.getElementById('btn-show-join').style.display = 'none'; 
         document.getElementById('join-section').style.display = 'block'; 
@@ -153,9 +164,33 @@
         document.getElementById('player-name').style.display = 'none';
     }
 
-    // ==========================================
-    // טעינת שם מהזיכרון ובדיקת קישור וואטסאפ (זנב URL)
-    // ==========================================
+    // פונקציית הודעה צפה (Toast)
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.style.background = 'rgba(74, 144, 226, 0.95)';
+        toast.style.color = 'white';
+        toast.style.padding = '15px 25px';
+        toast.style.borderRadius = '10px';
+        toast.style.fontWeight = 'bold';
+        toast.style.fontSize = '1.2rem';
+        toast.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+        toast.style.animation = 'fadein 0.5s, fadeout 0.5s 2.5s';
+        toast.innerText = message;
+        
+        const container = document.getElementById('toast-container');
+        container.appendChild(toast);
+        setTimeout(() => { toast.remove(); }, 3000);
+    }
+
+    // פונקציית הקראת מנצח (TTS)
+    function announceWinner(winnerName) {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(`המשחק הסתיים! המנצח הוא ${winnerName}`);
+            utterance.lang = 'he-IL';
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
         const savedName = localStorage.getItem('eretzIrName') || sessionStorage.getItem('myName') || '';
         if (savedName) {
@@ -337,6 +372,14 @@
 
     function showGameFields() {
         showScreen('game-screen'); document.getElementById('game-letter-header').innerText = "האות היא: " + currentLetter;
+        
+        // וידוא איפוס חלונית מארח במעבר למשחק חדש - מתקן את הבאג בו הכפתור לא הופיע במשחק השני
+        document.getElementById('host-updates').style.display = 'none';
+        document.getElementById('force-end-btn').style.display = 'none';
+        document.getElementById('host-updates-list').innerText = '';
+        document.getElementById('wait-for-others-msg').style.display = 'none';
+        document.getElementById('checking-status').innerText = 'התשובות שלך נבדקות כעת...';
+
         const submitBtn = document.getElementById('submit-btn'); submitBtn.disabled = false; submitBtn.innerText = "סיימתי!";
         const container = document.getElementById('categories-container'); container.innerHTML = '';
         activeCategories.forEach(cat => { container.innerHTML += `<div class="category-row"><label>${cat.label}</label><input type="text" id="input-${cat.id}" placeholder="ב-${currentLetter}..."><button class="btn-skip" onclick="document.getElementById('input-${cat.id}').value='---'">דלג</button></div>`; });
@@ -416,6 +459,11 @@
     }
 
     socket.on('playerFinishedStatus', (data) => {
+        // קריאה להודעה הצפה כשמישהו אחר מסיים
+        if (data.playerName !== myName) {
+            showToast(`השחקן ${data.playerName} סיים!`);
+        }
+
         if (isHost) {
             const hostUpdates = document.getElementById('host-updates');
             const forceBtn = document.getElementById('force-end-btn');
@@ -435,50 +483,65 @@
         socket.emit('forceEndGame', { roomId: currentRoom, forceHostSubmit: false });
     }
 
-    let lastEmailSentTime = 0; 
-    function sendResultsEmail(leaderboard) {
-        if (isMultiplayerMode && !isHost) return; 
+    // ==========================================
+    // שליחת מייל מצטבר ומשוכלל (ידנית על ידי המארח)
+    // ==========================================
+    function sendCumulativeEmail() {
+        if (window.gameSessionHistory.length === 0) return alert("אין משחקים לשלוח!");
         
-        const now = Date.now();
-        if (now - lastEmailSentTime < 10000) return; 
-        lastEmailSentTime = now;
+        const btn = document.getElementById('btn-send-email');
+        btn.disabled = true;
+        btn.innerText = "שולח למייל...";
 
-        let emailHtml = `<h3 style="color:#4a90e2; text-align: right;" dir="rtl">טבלת מובילים</h3>
-                         <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; max-width: 600px; text-align: right; border-collapse: collapse; font-family: sans-serif;" dir="rtl">
-                            <tr style="background-color: #4a90e2; color: white;"><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן (שניות)</th></tr>`;
+        let emailHtml = `<h2 style="color:#4a90e2; text-align:right;" dir="rtl">סיכום מפגש ארץ עיר (${window.gameSessionHistory.length} משחקים)</h2>`;
         
-        leaderboard.forEach((p, idx) => {
-            const finalDisp = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
-            emailHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color: green; font-weight: bold;">${finalDisp}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
-        });
-        emailHtml += `</table>`;
-
-        emailHtml += `<br><h3 style="color:#f5a623; text-align: right;" dir="rtl">פירוט תשובות לכל שחקן</h3>`;
-        
-        leaderboard.forEach(p => {
-            emailHtml += `<h4 style="margin-bottom: 5px; text-align: right;" dir="rtl">התשובות של: <span style="color:#8e44ad">${p.name}</span></h4>`;
-            emailHtml += `<table border="1" cellpadding="5" cellspacing="0" style="width: 100%; max-width: 600px; text-align: right; border-collapse: collapse; font-family: sans-serif; font-size: 0.9rem;" dir="rtl">
-                            <tr style="background-color: #f9f9f9;"><th>קטגוריה</th><th>תשובה</th><th>ניקוד</th><th>הערת שופט</th></tr>`;
+        window.gameSessionHistory.forEach((game, index) => {
+            emailHtml += `<hr style="margin: 20px 0;">`;
+            emailHtml += `<h3 style="color:#f5a623; text-align:right;" dir="rtl">משחק ${index + 1} - אות: ${game.letter} (מנצח/ת: ${game.leaderboard[0].name})</h3>`;
             
-            if (p.answers && Object.keys(p.answers).length > 0) {
-                activeCategories.forEach(cat => {
-                    let ans = p.answers[cat.label];
-                    if (ans) {
-                        let fdbk = ans.feedback ? ans.feedback : '';
-                        emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>${ans.val}</td><td style="color:green; font-weight:bold;">${ans.points}</td><td style="color:#666;">${fdbk}</td></tr>`;
-                    } else {
-                        emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>-</td><td>0</td><td></td></tr>`;
-                    }
-                });
-            } else {
-                emailHtml += `<tr><td colspan="4">לא הוגשו תשובות (פרש או נגמר הזמן)</td></tr>`;
-            }
+            emailHtml += `<table border="1" cellpadding="5" cellspacing="0" style="width:100%; max-width:600px; text-align:right; border-collapse:collapse;" dir="rtl">
+                            <tr style="background-color:#4a90e2; color:white;"><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן</th></tr>`;
+            game.leaderboard.forEach((p, idx) => {
+                const finalSc = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+                emailHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color:green; font-weight:bold;">${finalSc}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
+            });
             emailHtml += `</table><br>`;
+
+            game.leaderboard.forEach(p => {
+                emailHtml += `<h4 style="margin-bottom: 5px; text-align: right;" dir="rtl">התשובות של: <span style="color:#8e44ad">${p.name}</span></h4>`;
+                emailHtml += `<table border="1" cellpadding="5" cellspacing="0" style="width:100%; max-width:600px; text-align:right; border-collapse:collapse; font-size:0.9rem;" dir="rtl">
+                                <tr style="background-color:#f9f9f9;"><th>קטגוריה</th><th>תשובה</th><th>ניקוד</th><th>הערה</th></tr>`;
+                
+                if (p.answers && Object.keys(p.answers).length > 0) {
+                    game.activeCategories.forEach(cat => {
+                        let ans = p.answers[cat.label];
+                        if (ans) {
+                            let fdbk = ans.feedback || '';
+                            emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>${ans.val}</td><td style="color:green; font-weight:bold;">${ans.points}</td><td style="color:#666;">${fdbk}</td></tr>`;
+                        } else {
+                            emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>-</td><td>0</td><td></td></tr>`;
+                        }
+                    });
+                } else {
+                    emailHtml += `<tr><td colspan="4">לא הוגשו תשובות (פרש/נגמר הזמן)</td></tr>`;
+                }
+                emailHtml += `</table><br>`;
+            });
         });
 
-        emailjs.send("service_84tw6fs", "template_a1o8lid", { letter: currentLetter, winner_name: leaderboard[0].name, results_table: emailHtml })
-            .then(() => console.log('📧 מייל מפורט נשלח בהצלחה דרך EmailJS!'))
-            .catch(err => console.error('שגיאה בשליחת המייל...', err));
+        emailjs.send("service_84tw6fs", "template_a1o8lid", { 
+            letter: "סיכום מפגש", 
+            winner_name: "ראו פירוט בטבלאות", 
+            results_table: emailHtml 
+        }).then(() => {
+            alert('סיכום המשחקים נשלח בהצלחה למייל שלך!');
+            btn.innerText = "המייל נשלח בהצלחה ✅";
+        }).catch(err => {
+            console.error('שגיאה בשליחת המייל...', err);
+            alert('אירעה שגיאה בשליחה. נסה שוב.');
+            btn.disabled = false;
+            btn.innerText = `📧 נסה לשלוח שוב`;
+        });
     }
 
     socket.on('gameOver', (leaderboard) => {
@@ -487,8 +550,18 @@
     });
 
     function showFinalResults(leaderboard, myData) {
+        // שמירת המשחק הנוכחי בארכיון למייל المצטבר
+        window.gameSessionHistory.push({ letter: currentLetter, leaderboard: leaderboard, activeCategories: activeCategories });
+
         showScreen('results');
-        document.getElementById('winner-announcement').innerText = leaderboard.length > 1 ? `המנצח הוא ${leaderboard[0].name}!` : `סיימת!`;
+        
+        // הכרזת מנצח קולית (TTS) והצגת טקסט
+        const winnerNameText = leaderboard.length > 1 ? `המנצח הוא ${leaderboard[0].name}!` : `סיימת!`;
+        document.getElementById('winner-announcement').innerText = winnerNameText;
+        if (leaderboard.length > 1) {
+            announceWinner(leaderboard[0].name);
+        }
+
         const lb = document.getElementById('leaderboard-body'); lb.innerHTML = '';
         leaderboard.forEach((p, i) => { 
             let dispScore = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
@@ -511,7 +584,15 @@
         });
         comp.innerHTML = tableHtml + `</tbody></table>`;
         
-        sendResultsEmail(leaderboard); 
+        // הצגת כפתור שליחת מייל מצטבר רק למארח
+        const btnSend = document.getElementById('btn-send-email');
+        if (isHost || !isMultiplayerMode) {
+            btnSend.style.display = 'block';
+            btnSend.disabled = false;
+            btnSend.innerText = `📧 שלח דו"ח משחקים למייל (${window.gameSessionHistory.length} משחקים)`;
+        } else {
+            btnSend.style.display = 'none';
+        }
     }
 
     function playAgainInSameRoom() { if (isMultiplayerMode) socket.emit('backToLobby', currentRoom); else location.reload(); }
