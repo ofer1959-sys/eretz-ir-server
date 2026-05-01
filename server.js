@@ -3,7 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
-const nodemailer = require('nodemailer'); // ספריית המיילים
+const nodemailer = require('nodemailer');
 
 process.on('uncaughtException', (err) => console.error('Uncaught:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
@@ -25,18 +25,17 @@ console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
 console.log("✅ שופט AI פעיל: gemini-3.1-flash-lite-preview");
 
 // ==========================================
-// הגדרת מערכת הדיוור עם תיקון החסימה של Render
+// הגדרת מערכת הדיוור - מעקף לחסימת הרשת ב-Render (פורט 587)
 // ==========================================
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false, // חובה לשים false כשמשתמשים בפורט 587
+    requireTLS: true,
     auth: {
         user: emailUser,
         pass: emailPass
-    },
-    // פקודת הקסם שעוקפת את שגיאת ENETUNREACH ב-Render:
-    family: 4 
+    }
 });
 
 if (emailUser && emailPass) {
@@ -54,7 +53,7 @@ if (emailUser && emailPass) {
 const rooms = {};
 
 // ==========================================
-// פנייה לג'מיני (מעודכן למודל ה-3.1 שלך)
+// פנייה לג'מיני
 // ==========================================
 async function askGeminiDirectly(promptText) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${apiKey}`;
@@ -91,7 +90,7 @@ app.get('/api/test-gemini', async (req, res) => {
 });
 
 // ==========================================
-// שופט ה-AI (כולל הגבלת ההסבר ל-12 מילים)
+// שופט ה-AI
 // ==========================================
 app.post('/api/ask-judge-batch', async (req, res) => {
     const { letter, items } = req.body;
@@ -131,7 +130,6 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         }`;
         
         let isResolved = false;
-        // המתנה ארוכה של 25 שניות כדי למנוע את שגיאת ה"עומס ברשת"
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
         }, 25000));
@@ -152,7 +150,8 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results });
         }
 
-        let cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        let cleanText = response.text.replace(/```json/g, '').replace(/
+```/g, '').trim();
         res.json(JSON.parse(cleanText));
     } catch (e) {
         let results = {};
@@ -189,7 +188,6 @@ function calculateAndSendResults(roomId, isAppeal = false) {
 
     io.to(roomId).emit('gameOver', room.players);
 
-    // שליחת אימייל עם תוצאות (נשלח למשתמש שהגדרת ב-EMAIL_USER)
     if (emailUser && emailPass && (!room.emailSent || isAppeal)) {
         room.emailSent = true; 
         
@@ -213,7 +211,7 @@ function calculateAndSendResults(roomId, isAppeal = false) {
 
         const mailOptions = {
             from: emailUser,
-            to: emailUser, // המייל יישלח לכתובת שלך (הכתובת שמוגדרת בשרת)
+            to: emailUser,
             subject: subjectText,
             html: `<div dir="rtl">${emailHtml}</div>`
         };
@@ -319,7 +317,7 @@ io.on('connection', (socket) => {
         if (player) {
             player.baseScore = newTotalScore;
             player.answers = answers;
-            calculateAndSendResults(roomId, true); // משדר תוצאות ושולח מייל מעודכן
+            calculateAndSendResults(roomId, true);
         }
     });
 
@@ -355,7 +353,7 @@ io.on('connection', (socket) => {
         if (room) {
             room.gameStarted = false;
             room.submittedCount = 0;
-            room.emailSent = false; // איפוס לשליחת מייל למשחק הבא
+            room.emailSent = false;
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
             room.players.forEach(p => { p.hasSubmitted = false; p.baseScore = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
