@@ -35,7 +35,8 @@ const transporter = nodemailer.createTransport({
     auth: {
         user: emailUser,
         pass: emailPass
-    }
+    },
+    family: 4 // הפקודה שמצילה אותנו מהחסימה ב-Render
 });
 
 if (emailUser && emailPass) {
@@ -56,7 +57,7 @@ const rooms = {};
 // פנייה לג'מיני
 // ==========================================
 async function askGeminiDirectly(promptText) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${apiKey}`;
+    const url = `[https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=$){apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -150,9 +151,10 @@ app.post('/api/ask-judge-batch', async (req, res) => {
             return res.json({ results });
         }
 
-        let cleanText = response.text.replace(/```json/g, '').replace(/
-```/g, '').trim();
+        // התיקון הקריטי: חסין לתקלות העתק-הדבק של GitHub
+        let cleanText = response.text.split('```json').join('').split('```').join('').trim();
         res.json(JSON.parse(cleanText));
+        
     } catch (e) {
         let results = {};
         items.forEach(i => { results[i.catId] = { points: 5, reason: "תקלת שרת - אושר חלקית" }; });
