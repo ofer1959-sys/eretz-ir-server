@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ארץ עיר של סבא עופר</title>
-    <!-- טעינת ספריית EmailJS -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -43,10 +42,12 @@
         ul { list-style-type: none; padding: 0; }
         li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
         
-        /* עיצוב להודעה הצפה */
         #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
         @keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeout { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+        
+        .summary-box { background: #f9f9f9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid var(--primary); }
+        .summary-box h3 { margin-top: 0; color: var(--secondary); }
     </style>
 </head>
 <body>
@@ -142,17 +143,24 @@
 
         <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
             <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
-            <!-- כפתור שליחת מייל מצטבר למארח -->
-            <button id="btn-send-email" class="btn-host" style="display:none;" onclick="sendCumulativeEmail()"></button>
-            <button class="btn-success" onclick="shareResultsWhatsApp()">שתף תוצאות ב-WhatsApp 📱</button>
+            
+            <!-- כפתור סיום למארח (שולח מייל סמוי ומציג סיכום לכולם) -->
+            <button id="btn-end-session" class="btn-danger" style="display:none; padding: 15px; font-size: 1.3rem;" onclick="endSessionAndShowSummary()">סיום והצגת התוצאות</button>
         </div>
+    </div>
+
+    <!-- מסך סיכום המשחקים החדש -->
+    <div id="summary-screen" class="screen">
+        <h1 style="color: var(--primary); font-size: 2.5rem; margin-bottom: 20px;">סיכום המפגש 🏆</h1>
+        <div id="summary-content" style="text-align: right; width: 100%;"></div>
+        <button class="btn-success" onclick="location.reload()" style="margin-top: 30px; font-size: 1.2rem;">סיים וחזור למסך הראשי</button>
     </div>
 </div>
 
 <script>
-    // אתחול EmailJS וניהול זיכרון משחקים מצטבר
+    // אתחול EmailJS וניהול זיכרון
     emailjs.init("6haOOG3JbyY2rkE4x");
-    window.gameSessionHistory = []; // כאן נאגור את כל המשחקים של היום!
+    window.gameSessionHistory = []; 
 
     function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
     
@@ -311,7 +319,12 @@
         localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
         
         activeCategories = CATEGORIES.filter(c => !disabled.includes(c.id));
-        isMultiplayerMode = false; currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random() * 22)];
+        isMultiplayerMode = false; 
+        
+        // איפוס היסטוריה של משחק יחיד קודם
+        window.gameSessionHistory = [];
+        
+        currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random() * 22)];
         startCountdownSequence();
     }
 
@@ -322,6 +335,9 @@
         
         localStorage.setItem('eretzIrName', myName);
         localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
+        
+        // איפוס היסטוריה לחדר חדש
+        window.gameSessionHistory = [];
         
         isHost = true; sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'true');
         socket.emit('createRoom', { hostName: myName, disabledCategories: disabled });
@@ -334,6 +350,9 @@
         
         myName = nameInput; 
         localStorage.setItem('eretzIrName', myName);
+
+        // איפוס היסטוריה בהצטרפות לחדר
+        window.gameSessionHistory = [];
 
         isMultiplayerMode = true; isHost = false;
         sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'false'); sessionStorage.setItem('currentRoom', room);
@@ -373,7 +392,6 @@
     function showGameFields() {
         showScreen('game-screen'); document.getElementById('game-letter-header').innerText = "האות היא: " + currentLetter;
         
-        // וידוא איפוס חלונית מארח במעבר למשחק חדש - מתקן את הבאג בו הכפתור לא הופיע במשחק השני
         document.getElementById('host-updates').style.display = 'none';
         document.getElementById('force-end-btn').style.display = 'none';
         document.getElementById('host-updates-list').innerText = '';
@@ -459,7 +477,6 @@
     }
 
     socket.on('playerFinishedStatus', (data) => {
-        // קריאה להודעה הצפה כשמישהו אחר מסיים
         if (data.playerName !== myName) {
             showToast(`השחקן ${data.playerName} סיים!`);
         }
@@ -484,15 +501,47 @@
     }
 
     // ==========================================
-    // שליחת מייל מצטבר ומשוכלל (ידנית על ידי המארח)
+    // הצגת סיכום משחקים מלא ושליחת מייל סמויה
     // ==========================================
-    function sendCumulativeEmail() {
-        if (window.gameSessionHistory.length === 0) return alert("אין משחקים לשלוח!");
+    function endSessionAndShowSummary() {
+        // שליחת המייל בשקט מוחלט! בלי פופ-אפ, בלי לשנות כפתור
+        sendCumulativeEmailSilently();
         
-        const btn = document.getElementById('btn-send-email');
-        btn.disabled = true;
-        btn.innerText = "שולח למייל...";
+        // מעבר למסך הסיכום
+        if (isMultiplayerMode) {
+            // טריק: שימוש בערוץ פנוי בשרת כדי לפקוד על כל שאר השחקנים לעבור למסך הסיכום
+            socket.emit('announceFinish', { roomId: currentRoom, playerName: 'SHOW_SUMMARY_COMMAND' });
+        }
+        displayCumulativeSummary();
+    }
 
+    // האזנה לפקודת ה"טריק" מהמארח להצגת הסיכום אצל כולם
+    socket.on('playerAnnouncedFinish', (command) => {
+        if (command === 'SHOW_SUMMARY_COMMAND') {
+            displayCumulativeSummary();
+        }
+    });
+
+    function displayCumulativeSummary() {
+        showScreen('summary-screen');
+        let html = '';
+        window.gameSessionHistory.forEach((game, idx) => {
+            html += `<div class="summary-box">
+                        <h3 dir="rtl">משחק ${idx + 1} (אות ${game.letter}) - מנצח: ${game.leaderboard[0].name}</h3>
+                        <table class="leaderboard-table" style="font-size: 0.9rem;">
+                            <tr><th>מקום</th><th>שחקן</th><th>ניקוד</th></tr>`;
+            game.leaderboard.forEach((p, i) => {
+                const finalSc = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+                html += `<tr><td>${i+1}</td><td>${p.name}</td><td style="color:green; font-weight:bold;">${finalSc}</td></tr>`;
+            });
+            html += `</table></div>`;
+        });
+        document.getElementById('summary-content').innerHTML = html;
+    }
+
+    function sendCumulativeEmailSilently() {
+        if (window.gameSessionHistory.length === 0) return;
+        
         let emailHtml = `<h2 style="color:#4a90e2; text-align:right;" dir="rtl">סיכום מפגש ארץ עיר (${window.gameSessionHistory.length} משחקים)</h2>`;
         
         window.gameSessionHistory.forEach((game, index) => {
@@ -529,19 +578,12 @@
             });
         });
 
+        // שיגור הפקודה ל-EmailJS מבלי לעדכן את המסך ומבלי להקפיץ חלונית!
         emailjs.send("service_84tw6fs", "template_a1o8lid", { 
             letter: "סיכום מפגש", 
-            winner_name: "ראו פירוט בטבלאות", 
+            winner_name: "ראו דוח מצורף", 
             results_table: emailHtml 
-        }).then(() => {
-            alert('סיכום המשחקים נשלח בהצלחה למייל שלך!');
-            btn.innerText = "המייל נשלח בהצלחה ✅";
-        }).catch(err => {
-            console.error('שגיאה בשליחת המייל...', err);
-            alert('אירעה שגיאה בשליחה. נסה שוב.');
-            btn.disabled = false;
-            btn.innerText = `📧 נסה לשלוח שוב`;
-        });
+        }).then(() => console.log('הדוח נשלח בהצלחה למארח בשקט.')).catch(e => console.log('שגיאת שליחה', e));
     }
 
     socket.on('gameOver', (leaderboard) => {
@@ -550,14 +592,14 @@
     });
 
     function showFinalResults(leaderboard, myData) {
-        // שמירת המשחק הנוכחי בארכיון למייל المצטבר
         window.gameSessionHistory.push({ letter: currentLetter, leaderboard: leaderboard, activeCategories: activeCategories });
 
         showScreen('results');
         
-        // הכרזת מנצח קולית (TTS) והצגת טקסט
         const winnerNameText = leaderboard.length > 1 ? `המנצח הוא ${leaderboard[0].name}!` : `סיימת!`;
         document.getElementById('winner-announcement').innerText = winnerNameText;
+        
+        // הפעלת הדיבור (TTS) - המחשב יקריא את המנצח!
         if (leaderboard.length > 1) {
             announceWinner(leaderboard[0].name);
         }
@@ -584,19 +626,30 @@
         });
         comp.innerHTML = tableHtml + `</tbody></table>`;
         
-        // הצגת כפתור שליחת מייל מצטבר רק למארח
-        const btnSend = document.getElementById('btn-send-email');
+        // הצגת כפתור "סיום והצגת התוצאות" רק למארח או בשחקן יחיד
+        const btnEnd = document.getElementById('btn-end-session');
         if (isHost || !isMultiplayerMode) {
-            btnSend.style.display = 'block';
-            btnSend.disabled = false;
-            btnSend.innerText = `📧 שלח דו"ח משחקים למייל (${window.gameSessionHistory.length} משחקים)`;
+            btnEnd.style.display = 'block';
         } else {
-            btnSend.style.display = 'none';
+            btnEnd.style.display = 'none';
         }
     }
 
-    function playAgainInSameRoom() { if (isMultiplayerMode) socket.emit('backToLobby', currentRoom); else location.reload(); }
-    socket.on('returnToLobby', (data) => { currentLetter = data.letter; showScreen('lobby'); updatePlayersList(data.players); });
+    function playAgainInSameRoom() { 
+        if (isMultiplayerMode) {
+            socket.emit('backToLobby', currentRoom); 
+        } else {
+            // טיפול במשחק יחיד - מעבר ישיר למשחק הבא מבלי לרענן את הדף (שומר על ההיסטוריה!)
+            currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random() * 22)];
+            startCountdownSequence();
+        }
+    }
+    
+    socket.on('returnToLobby', (data) => { 
+        currentLetter = data.letter; 
+        showScreen('lobby'); 
+        updatePlayersList(data.players); 
+    });
 </script>
 </body>
 </html>
