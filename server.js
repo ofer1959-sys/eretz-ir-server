@@ -1,165 +1,392 @@
-require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const nodemailer = require('nodemailer');
-const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+const nodemailer = require('nodemailer'); // ספריית המיילים
+
+process.on('uncaughtException', (err) => console.error('Uncaught:', err));
+process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.static('public'));
+app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-const DB_FILE = 'approved_words.json'; 
-const HISTORY_FILE = 'game_history.json';
+const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
+const emailUser = (process.env.EMAIL_USER || "").trim();
+const emailPass = (process.env.EMAIL_PASS || "").trim();
 
-let aiApprovedWords = {};
-let globalGameHistory = []; 
-const rooms = {};
+console.log("=== SERVER STARTUP ===");
+console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
+console.log("✅ שופט AI פעיל: gemini-3.1-flash-lite-preview");
 
-// הגדרת סוכן המיילים
-let transporter;
-if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-    transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD }
-    });
-    console.log("📧 מערכת הדיוור האוטומטית מוכנה.");
-}
-
-// פונקציה לשליחת דוח מפורט למייל של סבא עופר
-async function sendDetailedReport(historyRecord, allAnswers) {
-    if (!transporter) return;
-    try {
-        let html = `
-        <div style="font-family: Arial, sans-serif; direction: rtl; text-align: right; padding: 20px; background-color: #f8f9fa;">
-            <h2 style="color: #2c3e50;">📊 דוח משחק ארץ עיר - סבא עופר</h2>
-            <p><strong>תאריך:</strong> ${historyRecord.date} | <strong>שעה:</strong> ${historyRecord.time}</p>
-            <p><strong>האות:</strong> <span style="font-size: 2em; color: #f39c12;">${historyRecord.letter}</span></p>
-        `;
-
-        for (let playerName in allAnswers) {
-            html += `
-            <div style="background: white; border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
-                <h3 style="color: #3498db; margin-top: 0;">שחקן: ${playerName}</h3>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #eee;">
-                            <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">קטגוריה</th>
-                            <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">תשובה</th>
-                            <th style="padding: 8px; border: 1px solid #ccc; text-align: center;">ניקוד</th>
-                            <th style="padding: 8px; border: 1px solid #ccc; text-align: right;">נימוק השופט</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            const answers = allAnswers[playerName];
-            for (let cat in answers) {
-                const a = answers[cat];
-                const color = a.points === 0 ? "#fdeaea" : (a.points < 10 ? "#fef9e7" : "#eafaf1");
-                html += `
-                <tr style="background-color: ${color};">
-                    <td style="padding: 8px; border: 1px solid #ccc;">${cat}</td>
-                    <td style="padding: 8px; border: 1px solid #ccc;"><strong>${a.val || "---"}</strong></td>
-                    <td style="padding: 8px; border: 1px solid #ccc; text-align: center;">${a.points}</td>
-                    <td style="padding: 8px; border: 1px solid #ccc; font-size: 0.85em;">${a.feedback || ""}</td>
-                </tr>`;
-            }
-            html += `</tbody></table></div>`;
-        }
-        html += `</div>`;
-
-        await transporter.sendMail({
-            from: `"ארץ עיר - בקרה" <${process.env.GMAIL_USER}>`,
-            to: process.env.GMAIL_USER,
-            subject: `🎮 תוצאות משחק (אות: ${historyRecord.letter}) - ${historyRecord.date}`,
-            html: html
-        });
-    } catch (e) { console.error("שגיאה במייל:", e.message); }
-}
-
-// --- מנגנון גילוי המודל של גוגל ---
-let activeModelName = null;
-async function initializeGemini() {
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
-    if (!apiKey) return;
-    try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const data = await res.json();
-        const validModels = data.models.filter(m => m.supportedGenerationMethods.includes('generateContent'));
-        const sorted = validModels.sort((a,b) => a.name.includes('flash') ? -1 : 1);
-        for (let m of sorted) {
-            const test = await fetch(`https://generativelanguage.googleapis.com/v1beta/${m.name}:generateContent?key=${apiKey}`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({contents:[{parts:[{text:"test"}]}]})
-            });
-            if (test.ok) { activeModelName = m.name.replace('models/', ''); break; }
-        }
-        console.log(`✅ שופט AI פעיל: ${activeModelName}`);
-    } catch (e) {}
-}
-initializeGemini();
-
-app.post('/api/ask-judge-batch', async (req, res) => {
-    try {
-        const { letter, items } = req.body;
-        let promptList = items.map(i => `קטגוריה: ${i.categoryLabel} (ID: ${i.catId}) | מילה: "${i.answer}"`).join('\n');
-        const prompt = `אתה שופט במשחק 'ארץ עיר' באות '${letter}'. בדוק את המילים והחזר אך ורק JSON.
-חוקים: נכון=10, שגיאת כתיב קלה=5, לא נכון/אות שגויה/לא קיים=0.
-חובה לתת נימוק קצר בשדה 'reason'. השתמש ב-ID שקיבלת כמפתח.
-{"results": {"catId": {"points": 10, "reason": "נימוק" }}} \n רשימה:\n${promptList}`;
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModelName}:generateContent?key=${process.env.GEMINI_API_KEY.trim()}`;
-        const response = await fetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({contents:[{parts:[{text:prompt}]}]})});
-        const data = await response.json();
-        let jsonStr = data.candidates[0].content.parts[0].text.match(/\{[\s\S]*\}/)[0];
-        res.json(JSON.parse(jsonStr));
-    } catch (e) { res.status(500).json({ error: e.message }); }
+// ==========================================
+// הגדרת מערכת הדיוור עם תיקון החסימה של Render
+// ==========================================
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: emailUser,
+        pass: emailPass
+    },
+    // פקודת הקסם שעוקפת את שגיאת ENETUNREACH ב-Render:
+    family: 4 
 });
 
+if (emailUser && emailPass) {
+    transporter.verify(function(error, success) {
+        if (error) {
+            console.error("שגיאה בחיבור למייל:", error.message);
+        } else {
+            console.log("📧 מערכת הדיוור האוטומטית מוכנה.");
+        }
+    });
+} else {
+    console.log("⚠️ חסרים פרטי אימייל (EMAIL_USER / EMAIL_PASS) - לא יישלחו מיילים.");
+}
+
+const rooms = {};
+
+// ==========================================
+// פנייה לג'מיני (מעודכן למודל ה-3.1 שלך)
+// ==========================================
+async function askGeminiDirectly(promptText) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`HTTP Error ${response.status}: ${errorData}`);
+    }
+
+    const data = await response.json();
+    if (data && data.candidates && data.candidates.length > 0) {
+        return data.candidates[0].content.parts[0].text;
+    } else {
+        throw new Error("No valid response from Gemini");
+    }
+}
+
+app.get('/api/test-gemini', async (req, res) => {
+    if (apiKey === "MISSING_KEY") return res.json({ status: "Error", message: "API Key is missing." });
+    try {
+        const text = await askGeminiDirectly("השב במילה אחת בלבד: האם אתה מחובר?");
+        res.json({ status: "Success", gemini_response: text.trim() });
+    } catch (e) {
+        res.json({ status: "Error", message: e.message });
+    }
+});
+
+// ==========================================
+// שופט ה-AI (כולל הגבלת ההסבר ל-12 מילים)
+// ==========================================
+app.post('/api/ask-judge-batch', async (req, res) => {
+    const { letter, items } = req.body;
+    
+    if (apiKey === "MISSING_KEY") {
+        let results = {};
+        items.forEach(i => { results[i.catId] = { points: 5, reason: "אין מפתח API בשרת" }; });
+        return res.json({ results });
+    }
+
+    try {
+        const prompt = `אתה שופט ערעורים במשחק "ארץ עיר" בעברית. האות הנדרשת: "${letter}".
+        בדוק את רשימת התשובות הבאות.
+        
+        כללי הערעור:
+        1. האות הראשונה: המילה חייבת להתחיל באות "${letter}". אם לא - פסול (0 נקודות).
+        2. רווחים וכתיב: התעלם מרווחים (למשל "פופ קורן" = "פופקורן"), והתעלם מ-א/י/ו/ה עודפות או חסרות.
+        3. שמות ויישובים: אשר יישובים קטנים בישראל, מקצועות ומילים לגיטימיות גם אם הן נדירות או צורת זכר/נקבה.
+        4. הערכת ניקוד: 
+           - 10 נקודות לתשובה מדויקת ותקנית.
+           - 5 נקודות לתשובה קרובה, סלנג, או טעות כתיב צורמת של אות אחת.
+           - 0 נקודות לתשובה שגויה לחלוטין.
+
+        הוראה קריטית לגבי הסברים (reason):
+        אם אתה מעניק 0 או 5 נקודות, עליך לכתוב הסבר קצר לסיבה. ההסבר חייב להיות באורך של עד 12 מילים לכל היותר!
+        אם אישרת במלואו (10 נקודות), כתוב פשוט "אושר".
+
+        התשובות לבדיקה:
+        ${items.map(i => `- מזהה: "${i.catId}", קטגוריה: "${i.categoryLabel}", תשובה של השחקן: "${i.answer}"`).join('\n')}
+
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
+        {
+          "results": {
+            "catId_1": {"points": 10, "reason": "אושר"},
+            "catId_2": {"points": 0, "reason": "הסבר עד 12 מילים"}
+          }
+        }`;
+        
+        let isResolved = false;
+        // המתנה ארוכה של 25 שניות כדי למנוע את שגיאת ה"עומס ברשת"
+        const timeout = new Promise((resolve) => setTimeout(() => {
+            if (!isResolved) resolve({ timeout: true });
+        }, 25000));
+        
+        const result = askGeminiDirectly(prompt).then(text => {
+            isResolved = true; 
+            return { text: text };
+        }).catch(e => {
+            isResolved = true; 
+            return { error: true, details: e.message }; 
+        });
+        
+        const response = await Promise.race([result, timeout]);
+        
+        if (response.timeout || response.error) {
+            let results = {};
+            items.forEach(i => { results[i.catId] = { points: 5, reason: "עומס ברשת - אושר חלקית" }; });
+            return res.json({ results });
+        }
+
+        let cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(cleanText));
+    } catch (e) {
+        let results = {};
+        items.forEach(i => { results[i.catId] = { points: 5, reason: "תקלת שרת - אושר חלקית" }; });
+        res.json({ results });
+    }
+});
+
+// ==========================================
+// ניהול ניקוד ושליחת מייל
+// ==========================================
+function calculateAndSendResults(roomId, isAppeal = false) {
+    const room = rooms[roomId];
+    if (!room) return;
+    
+    const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
+    room.players.forEach(p => {
+        let score = p.baseScore || 0; 
+        
+        if (minTime > 0 && minTime !== Infinity && p.time < 999) {
+            const excessRatio = (p.time - minTime) / minTime;
+            if (excessRatio > 0.50) {
+                const penalties = Math.floor(excessRatio / 0.10);
+                score -= (penalties * 5);
+            }
+        }
+        p.finalScore = Number(Math.max(0, score).toFixed(2));
+    });
+
+    room.players.sort((a, b) => {
+        if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
+        return a.time - b.time;
+    });
+
+    io.to(roomId).emit('gameOver', room.players);
+
+    // שליחת אימייל עם תוצאות (נשלח למשתמש שהגדרת ב-EMAIL_USER)
+    if (emailUser && emailPass && (!room.emailSent || isAppeal)) {
+        room.emailSent = true; 
+        
+        let subjectText = isAppeal ? `עדכון תוצאות לאחר ערעור - אות ${room.letter}` : `תוצאות ארץ עיר - אות ${room.letter}`;
+        let emailHtml = `<h2 style="color:#4a90e2; text-align:center;">${subjectText}</h2>
+                         <table border="1" cellpadding="10" cellspacing="0" style="margin: 0 auto; width: 100%; max-width: 600px; text-align: center; border-collapse: collapse;">
+                            <tr style="background-color: #f5a623; color: white;">
+                                <th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן (שניות)</th>
+                            </tr>`;
+        
+        room.players.forEach((p, idx) => {
+            emailHtml += `<tr>
+                            <td>${idx+1}</td>
+                            <td style="font-weight:bold;">${p.name}</td>
+                            <td style="color:green; font-weight:bold;">${p.finalScore}</td>
+                            <td>${p.time === 999 ? 'פרש' : p.time}</td>
+                          </tr>`;
+        });
+        
+        emailHtml += `</table><br><p style="text-align:center;">נשלח אוטומטית מהשרת של סבא עופר 👑</p>`;
+
+        const mailOptions = {
+            from: emailUser,
+            to: emailUser, // המייל יישלח לכתובת שלך (הכתובת שמוגדרת בשרת)
+            subject: subjectText,
+            html: `<div dir="rtl">${emailHtml}</div>`
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error("שגיאה בשליחת המייל:", error.message);
+            } else {
+                console.log("📧 מייל סיכום משחק נשלח בהצלחה!");
+            }
+        });
+    }
+}
+
+// ==========================================
+// ניהול החדרים (Socket.io)
+// ==========================================
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
-        rooms[roomId] = { host: socket.id, letter: letters[Math.floor(Math.random() * 22)], players: [{ socketId: socket.id, name: data.hostName, isHost: true }], submissions: [] };
+        const gameLetter = letters[Math.floor(Math.random() * letters.length)];
+        
+        rooms[roomId] = { 
+            players: [], 
+            letter: gameLetter, 
+            submittedCount: 0, 
+            gameStarted: false,
+            emailSent: false,
+            disabledCategories: data.disabledCategories || []
+        };
         socket.join(roomId);
-        socket.emit('roomCreated', { roomId, letter: rooms[roomId].letter, players: rooms[roomId].players });
+        rooms[roomId].players.push({ id: socket.id, name: data.hostName, isHost: true, hasSubmitted: false });
+        socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players, disabledCategories: rooms[roomId].disabledCategories });
     });
 
-    socket.on('submitScore', (data) => {
-        const room = rooms[data.roomId];
-        if (!room) return;
-        room.submissions.push({ name: data.playerName, score: data.totalScore, answers: data.answers });
-        if (room.submissions.length >= room.players.length) {
-            const leaderboard = [...room.submissions].sort((a,b) => b.score - a.score);
-            const historyRecord = { date: new Date().toLocaleDateString('he-IL'), time: new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}), letter: room.letter, players: leaderboard.map(p => ({ name: p.name, score: p.score })) };
-            const allAnswers = {}; room.submissions.forEach(s => allAnswers[s.name] = s.answers);
-            sendDetailedReport(historyRecord, allAnswers);
-            io.to(data.roomId).emit('gameOver', { leaderboard, historyRecord });
-            globalGameHistory.push(historyRecord);
+    socket.on('joinRoom', ({ roomId, playerName, isHostClaim }) => {
+        let room = rooms[roomId];
+        if (!room) {
+            const letters = "אבגדהזחטיכלמנסעפצקרשת";
+            rooms[roomId] = { players: [], letter: letters[Math.floor(Math.random() * letters.length)], submittedCount: 0, gameStarted: false, emailSent: false, disabledCategories: [] };
+            room = rooms[roomId];
+        }
+
+        const existingPlayer = room.players.find(p => p.name === playerName);
+        if (existingPlayer) {
+            existingPlayer.id = socket.id; 
+            if (isHostClaim) existingPlayer.isHost = true;
+        } else {
+            const hasHost = room.players.some(p => p.isHost);
+            room.players.push({ id: socket.id, name: playerName, isHost: isHostClaim || !hasHost, hasSubmitted: false });
+        }
+        
+        socket.join(roomId);
+        const myPlayer = room.players.find(p => p.name === playerName);
+        socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost, disabledCategories: room.disabledCategories });
+        io.to(roomId).emit('updatePlayers', room.players);
+    });
+
+    socket.on('startGame', (data) => {
+        const roomId = data.roomId;
+        if(rooms[roomId]) {
+            rooms[roomId].gameStarted = true;
+            io.to(roomId).emit('gameStarted', { 
+                letter: rooms[roomId].letter, 
+                disabledCategories: rooms[roomId].disabledCategories 
+            });
         }
     });
 
-    socket.on('logSinglePlayerHistory', (data) => {
-        const allAnswers = {}; allAnswers[data.historyRecord.players[0].name] = data.fullAnswers;
-        sendDetailedReport(data.historyRecord, allAnswers);
-        globalGameHistory.push(data.historyRecord);
+    socket.on('announceFinish', ({ roomId, playerName }) => {
+        io.to(roomId).emit('playerAnnouncedFinish', playerName);
     });
 
-    socket.on('getAdminData', () => {
-        socket.emit('receiveAdminData', { history: globalGameHistory });
+    socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
+        const room = rooms[roomId];
+        if (!room) return socket.emit('gameError', 'השרת איבד את החדר. נאלץ להתחיל משחק חדש.');
+        
+        const player = room.players.find(p => p.id === socket.id);
+        if (player && !player.hasSubmitted) {
+            player.baseScore = totalScore;
+            player.time = timeInSeconds;
+            player.answers = answers;
+            player.hasSubmitted = true;
+            room.submittedCount++;
+            
+            const waitingFor = room.players.filter(p => !p.hasSubmitted).map(p => p.name);
+            io.to(roomId).emit('playerFinishedStatus', {
+                playerName: player.name,
+                submittedCount: room.submittedCount,
+                totalPlayers: room.players.length,
+                waitingFor: waitingFor
+            });
+
+            if (room.submittedCount === room.players.length) calculateAndSendResults(roomId, false);
+        }
     });
 
-    socket.on('restoreAdminData', (data) => {
-        if (data.history) globalGameHistory = data.history;
+    socket.on('submitAppeal', ({ roomId, playerName, newTotalScore, answers }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        const player = room.players.find(p => p.name === playerName);
+        if (player) {
+            player.baseScore = newTotalScore;
+            player.answers = answers;
+            calculateAndSendResults(roomId, true); // משדר תוצאות ושולח מייל מעודכן
+        }
     });
 
-    socket.on('clearGameHistory', () => {
-        globalGameHistory = [];
-        socket.emit('receiveAdminData', { history: [] });
+    socket.on('announceAppeal', ({ roomId, playerName }) => {
+        io.to(roomId).emit('appealStarted', playerName);
+    });
+
+    socket.on('forceEndGame', (data) => {
+        const room = rooms[data.roomId];
+        if (!room) return;
+        const host = room.players.find(p => p.id === socket.id);
+        if (host && host.isHost) {
+            if (!host.hasSubmitted && data.forceHostSubmit) {
+                host.baseScore = data.myTotalScore || 0;
+                host.time = data.myTime || 999;
+                host.answers = data.myAnswers || {};
+                host.hasSubmitted = true;
+                room.submittedCount++;
+            }
+            room.players.forEach(p => {
+                if (!p.hasSubmitted) {
+                    p.hasSubmitted = true;
+                    p.baseScore = 0; p.time = 999; p.answers = {};
+                    room.submittedCount++;
+                }
+            });
+            calculateAndSendResults(data.roomId, false);
+        }
+    });
+
+    socket.on('backToLobby', (roomId) => {
+        const room = rooms[roomId];
+        if (room) {
+            room.gameStarted = false;
+            room.submittedCount = 0;
+            room.emailSent = false; // איפוס לשליחת מייל למשחק הבא
+            const letters = "אבגדהזחטיכלמנסעפצקרשת";
+            room.letter = letters[Math.floor(Math.random() * letters.length)];
+            room.players.forEach(p => { p.hasSubmitted = false; p.baseScore = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
+            io.to(roomId).emit('returnToLobby', { letter: room.letter, players: room.players, disabledCategories: room.disabledCategories });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        for (const roomId in rooms) {
+            const room = rooms[roomId];
+            const playerIndex = room.players.findIndex(p => p.id === socket.id);
+            if (playerIndex !== -1) {
+                if (!room.gameStarted) {
+                    room.players.splice(playerIndex, 1);
+                    io.to(roomId).emit('updatePlayers', room.players);
+                } else if (room.gameStarted && !room.players[playerIndex].hasSubmitted) {
+                    setTimeout(() => {
+                        if (rooms[roomId] && rooms[roomId].players[playerIndex] && !rooms[roomId].players[playerIndex].hasSubmitted) {
+                            rooms[roomId].players[playerIndex].hasSubmitted = true;
+                            rooms[roomId].players[playerIndex].baseScore = 0;
+                            rooms[roomId].players[playerIndex].time = 999; 
+                            rooms[roomId].players[playerIndex].answers = {};
+                            rooms[roomId].submittedCount++;
+                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId, false);
+                        }
+                    }, 60000); 
+                }
+            }
+        }
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+server.listen(PORT, () => console.log('Server is running on port ' + PORT));
