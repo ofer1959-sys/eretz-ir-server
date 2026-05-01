@@ -116,7 +116,6 @@
         <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות שלך נבדקות כעת על ידי שופט ה-AI...</p>
         <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem; display:none;">אנא המתן עד ששאר השחקנים יסיימו.</p>
         
-        <!-- חלונית העדכונים של המארח (כולל כפתור סיום) -->
         <div id="host-updates" style="margin-top: 20px; padding: 15px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
             <strong style="color: var(--primary); font-size: 1.2rem;">ניהול חדר:</strong>
             <div id="host-updates-list" style="margin-top: 10px; font-size: 1.1rem; color: #333; font-weight: bold;"></div>
@@ -145,7 +144,25 @@
     // אתחול EmailJS
     emailjs.init("6haOOG3JbyY2rkE4x");
 
-    // --- (השארתי את המאגר הגדול המקומי כדי לחסוך מקום, המערכת תזהה לבד מתי לפנות ל-AI) ---
+    // ==========================================
+    // טעינת שם וקטגוריות מהזיכרון המקומי
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedName = localStorage.getItem('eretzIrName') || sessionStorage.getItem('myName') || '';
+        if (savedName) {
+            document.getElementById('player-name').value = savedName;
+            document.getElementById('join-player-name').value = savedName;
+        }
+
+        try {
+            const savedCats = JSON.parse(localStorage.getItem('eretzIrDisabledCats') || '[]');
+            savedCats.forEach(catId => {
+                const cb = document.querySelector(`.cat-disable-cb[value="${catId}"]`);
+                if (cb) cb.checked = true;
+            });
+        } catch(e) {}
+    });
+
     const RAW_DATA = {
         capitals: `אבו דאבי,אבוג'ה,אקרה,אדיס אבבה,עדן,אלג'יר,עמאן,אמסטרדם,אנדורה לה ולה,אנקרה,אנטננריבו,אפיה,אשגבאט,אסמרה,אסטנה,אסונסיון,אתונה,בגדאד,באקו,במקו,בנדר סרי בגוואן,בנגקוק,בנגי,בנג'ול,בסטרה,בייג'ינג,ביירות,בלגרד,בלמופן,ברלין,ברן,בישקק,ביסאו,בלומפונטיין,בוגוטה,ברזיליה,ברטיסלאבה,ברזוויל,ברידג'טאון,בריסל,בוקרשט,בודפשט,בואנוס איירס,בוג'ומבורה,קהיר,קנברה,קייפטאון,קראקס,קסטריז,קישינב,קולומבו,קונאקרי,קופנהגן,קוטונו,דקר,דמשק,דאר א-סלאם,דאקה,דילי,ג'יבוטי,דודומה,דוחה,דבלין,דושנבה,פריטאון,פונפוטי,גאבורון,ג'ורג'טאון,גיטגה,גואטמלה סיטי,האנוי,הארארה,הוואנה,הלסינקי,הוניארה,אסלאמאבאד,ג'קרטה,ירושלים,ג'ובה,קאבול,קמפלה,קטמנדו,חרטום,קיגאלי,קינגסטון,קינגסטאון,קינשאסה,קואלה לומפור,כווית סיטי,קייב,לה פאס,ליברוויל,לילונגווה,לימה,ליסבון,לובליאנה,לובמבה,לומה,לונדון,לואנדה,לוסקה,לוקסמבורג,מדריד,מג'ורו,מלאבו,מאלה,מנגואה,מנאמה,מנילה,מפוטו,מסרו,מבבנה,מקסיקו סיטי,מינסק,מוגדישו,מונקו,מונרוביה,מונטווידאו,מורוני,מוסקבה,מוסקט,נג'מנה,ניירובי,נסאו,נייפידאו,ניו דלהי,נגרולמוד,ניאמיי,ניקוסיה,נואקשוט,נוקואלופה,אוסלו,אוטווה,ואגאדוגו,פליקיר,פנמה סיטי,פרמריבו,פריז,פאריס,פנום פן,פודגוריצה,פורט לואי,פורט מורסבי,פורט אוף ספיין,פורט וילה,פורט-או-פרנס,פורטו-נובו,פראג,פראיה,פרטוריה,פוטרג'איה,פיונגיאנג,קיטו,רבאט,רייקיאוויק,ריגה,ריאד,רומא,רוזו,סנט ג'ורג'ס,סנט ג'ונס,סן חוסה,סן מרינו,סן סלוודור,צנעא,סנטיאגו,סנטו דומינגו,סרייבו,סיאול,סינגפור,סקופיה,סופיה,דרום טאראווה,סרי ג'איאווארדנפורה קוטה,סטוקהולם,סוקרה,סובה,סאו טומה,טאיפיי,טאלין,טשקנט,טביליסי,טגוסיגלפה,טהרן,האג,ת'ימפו,טירנה,טוקיו,טריפולי,תוניס,טוניס,אולן בטור,ואדוץ,ולטה,קריית הוותיקן,ויקטוריה,וינה,ויינטיאן,וילנה,ורשה,וושינגטון די. סי.,ולינגטון,וינדהוק,יאמוסוקרו,יאונדה,יארן,ירוואן,זאגרב`,
         countries: `אפגניסטן,אלבניה,אלג'יריה,אנדורה,אנגולה,אנטיגואה וברבודה,ארגנטינה,ארמניה,אוסטרליה,אוסטריה,אזרבייג'ן,איי בהאמה,בחריין,בנגלדש,ברבדוס,בלארוס,בלגיה,בליז,בנין,בהוטן,בוליביה,בוסניה והרצגובינה,בוצוואנה,ברזיל,ברוניי,בולגריה,בורקינה פאסו,בורונדי,כף ורדה,קמבודיה,קמרון,קנדה,הרפובליקה המרכז-אפריקאית,צ'אד,צ'ילה,סין,קולומביה,קומורו,הרפובליקה הדמוקרטית של קונגו,הרפובליקה של קונגו,קוסטה ריקה,חוף השנהב,קרואטיה,קובה,קפריסין,צ'כיה,דנמרק,ג'יבוטי,דומיניקה,הרפובליקה הדומיניקנית,אקוודור,מצרים,אל סלוודור,גינאה המשוונית,אריתריאה,אסטוניה,אסוואטיני,אתיופיה,פיג'י,פינלנד,צרפת,גבון,גמביה,גאורגיה,גרמניה,גאנה,יוון,גרנדה,גואטמלה,גינאה,גינאה-ביסאו,גיאנה,האיטי,הונדורס,הונגריה,איסלנד,הודו,אינדונזיה,איראן,עיראק,אירלנד,ישראל,איטליה,ג'מייקה,יפן,ירדן,קזחסטן,קניה,קיריבטי,קוריאה הצפונית,קוריאה הדרומית,כווית,קירגיזסטן,לאוס,לטביה,לבנון,לסוטו,ליבריה,לוב,ליכטנשטיין,ליטא,לוקסמבורג,מדגסקר,מלאווי,מלזיה,האיים המלדיביים,מאלי,מלטה,איי מרשל,מאוריטניה,מאוריציוס,מקסיקו,מיקרונזיה,מולדובה,מונקו,מונגוליה,מונטנגרו,מרוקו,מוזמביק,מיאנמר,נמיביה,נאורו,נפאל,הולנד,ניו זילנד,ניקרגואה,ניז'ר,ניגריה,מקדוניה הצפונית,נורווגיה,עומאן,פקיסטן,פלאו,פנמה,פפואה גינאה החדשה,פרגוואי,פרו,הפיליפינים,פולין,פורטוגל,קטר,רומניה,רוסיה,רואנדה,סנט קיטס ונוויס,סנט לוסיה,סנט וינסנט והגרנדינים,סמואה,סן מרינו,סאו טומה ופרינסיפה,ערב הסעודית,סנגל,סרביה,סיישל,סיירה לאון,סינגפור,סלובקיה,סלובניה,איי שלמה,סומליה,דרום אפריקה,דרום סודן,ספרד,סרי לנקה,סודן,סורינאם,שוודיה,שווייץ,סוריה,טג'יקיסטן,טנזניה,תאילנד,טימור-לסטה,טוגו,טונגה,טרינידד וטובגו,תוניסיה,טורקיה,טורקמניסטן,טובאלו,אוגנדה,אוקראינה,איחוד האמירויות הערביות,הממלכה המאוחדת,ארצות הברית,אורוגוואי,אוזבקיסטן,ונואטו,ונצואלה,וייטנאם,תימן,זמביה,זימבבואה,הכס הקדוש,ותיקן,אנגליה,סקוטלנד,בריטניה,אזרביג'אן,בוטסואנה,בוטצואנה,קמא,קונגו,סלוודור,סלבדור,גיאורגיה,גאנה,צפון קוריאה,דרום קוריאה,מינמר,צפון אירלנד,נורבגיה,פקיסטאן,פיליפינים,סישל,איי סיישל,סיישל,דובאי,אבו דאבי,איחוד האמירויות,טורקמניסטאן,תורקמניסטאן,ססירה ליאון,סומלילנד,טוניסיה,ויאטנם,ויאטנאם,זימבבווה,שבדיה`,
@@ -179,7 +196,7 @@
         for (let item of NORMALIZED_DATA[categoryId] || []) {
             if (phonUser === item.phonetic) return { matchType: 'exact' };
         }
-        return { matchType: 'none' }; // לא מצאנו התאמה מדויקת מקומית -> שלח ל-AI
+        return { matchType: 'none' };
     }
 
     const CATEGORIES = [
@@ -210,6 +227,11 @@
         if (!myName) return alert("הכנס שם!");
         let disabled = getDisabledCategories();
         if (disabled.length >= CATEGORIES.length) return alert("חייבים להשאיר לפחות קטגוריה אחת!");
+        
+        // שמירת הנתונים בזיכרון המקומי
+        localStorage.setItem('eretzIrName', myName);
+        localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
+        
         activeCategories = CATEGORIES.filter(c => !disabled.includes(c.id));
         isMultiplayerMode = false; currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random() * 22)];
         startCountdownSequence();
@@ -219,6 +241,11 @@
         myName = document.getElementById('player-name').value.trim();
         if (!myName) return alert("הכנס שם!");
         let disabled = getDisabledCategories();
+        
+        // שמירת הנתונים בזיכרון המקומי
+        localStorage.setItem('eretzIrName', myName);
+        localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
+        
         isHost = true; sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'true');
         socket.emit('createRoom', { hostName: myName, disabledCategories: disabled });
     }
@@ -227,7 +254,11 @@
         const nameInput = document.getElementById('join-player-name').value.trim() || document.getElementById('player-name').value.trim();
         const room = document.getElementById('room-code').value.toUpperCase().trim();
         if (!nameInput || !room) return alert("הכנס שם וקוד חדר!");
-        myName = nameInput; isMultiplayerMode = true; isHost = false;
+        
+        myName = nameInput; 
+        localStorage.setItem('eretzIrName', myName); // שמירת השם
+
+        isMultiplayerMode = true; isHost = false;
         sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'false'); sessionStorage.setItem('currentRoom', room);
         socket.emit('joinRoom', { roomId: room, playerName: myName, isHostClaim: false });
         showScreen('lobby'); document.getElementById('display-room-code').innerText = room; document.getElementById('waiting-msg').style.display = 'block';
@@ -251,18 +282,14 @@
         startTime = Date.now(); timerInterval = setInterval(() => { const elapsed = Math.floor((Date.now() - startTime) / 1000); document.getElementById('timer-display').innerText = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`; }, 1000);
     }
 
-    // ==========================================
-    // שיפוט AI אוטומטי ושליחת תוצאות
-    // ==========================================
     async function submitGame() {
         clearInterval(timerInterval); lastTimeInSeconds = Math.floor((Date.now() - startTime) / 1000);
         const submitBtn = document.getElementById('submit-btn'); submitBtn.disabled = true; submitBtn.innerText = "מעבד...";
         
         myTotalPoints = 0; playerAnswers = {};
         const pointsPerQuestion = 100 / activeCategories.length;
-        let itemsToJudge = []; // רשימת המילים שנשלח ל-AI
+        let itemsToJudge = []; 
 
-        // בדיקה מקומית ראשונית
         activeCategories.forEach(cat => {
             const val = document.getElementById('input-' + cat.id).value.trim();
             if (val === "---" || val === "") {
@@ -270,11 +297,9 @@
             } else {
                 const res = validateWordLocally(val, currentLetter, cat.id);
                 if (res.matchType === 'exact') {
-                    // מצאנו במאגר - 10 נקודות בטוחות
                     playerAnswers[cat.label] = { val: val, isCorrect: true, points: formatScore(pointsPerQuestion), feedback: "אושר אוטומטית", catId: cat.id };
                     myTotalPoints += pointsPerQuestion;
                 } else {
-                    // לא במאגר - מכינים לשליחה לשופט
                     playerAnswers[cat.label] = { val: val, isCorrect: false, points: 0, feedback: "בבדיקה...", catId: cat.id };
                     itemsToJudge.push({ catId: cat.id, categoryLabel: cat.label, answer: val });
                 }
@@ -283,7 +308,6 @@
 
         showScreen('waiting-results');
         
-        // אם יש מילים שדורשות שופט AI, נשלח אותן עכשיו
         if (itemsToJudge.length > 0) {
             document.getElementById('checking-status').innerText = "שופט ה-AI בודק את התשובות שלך...";
             try {
@@ -294,7 +318,6 @@
                 });
                 const data = await response.json();
                 
-                // עדכון התוצאות מה-AI
                 itemsToJudge.forEach(item => {
                     const resItem = data.results[item.catId];
                     if (resItem) {
@@ -307,7 +330,6 @@
                 });
             } catch (e) {
                 console.error("שגיאה בחיבור ל-AI", e);
-                // במקרה של קריסת רשת, ניתן חצי ניקוד כדי לא לדפוק את השחקן
                 itemsToJudge.forEach(item => {
                     playerAnswers[item.categoryLabel].points = formatScore(pointsPerQuestion / 2);
                     playerAnswers[item.categoryLabel].feedback = "אושר חלקית (תקלת רשת)";
@@ -319,7 +341,6 @@
         myTotalPoints = formatScore(myTotalPoints);
         document.getElementById('checking-status').innerText = "הבדיקה הסתיימה!";
 
-        // הגשת התוצאה לשרת
         if (isMultiplayerMode) {
             document.getElementById('wait-for-others-msg').style.display = 'block';
             socket.emit('submitScore', { roomId: currentRoom, totalScore: myTotalPoints, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
@@ -328,9 +349,6 @@
         }
     }
 
-    // ==========================================
-    // ניהול תצוגת מארח (כפתור "סיים משחק")
-    // ==========================================
     socket.on('playerFinishedStatus', (data) => {
         if (isHost) {
             const hostUpdates = document.getElementById('host-updates');
@@ -341,7 +359,7 @@
                 forceBtn.style.display = 'block';
                 document.getElementById('host-updates-list').innerText = `שחקנים שסיימו: ${data.submittedCount}/${data.totalPlayers}\nממתין ל: ${data.waitingFor.join(', ')}`;
             } else {
-                forceBtn.style.display = 'none'; // כולם סיימו
+                forceBtn.style.display = 'none'; 
             }
         }
     });
@@ -351,12 +369,9 @@
         socket.emit('forceEndGame', { roomId: currentRoom, forceHostSubmit: false });
     }
 
-    // ==========================================
-    // שליחת מייל והצגת תוצאות סופיות
-    // ==========================================
     let lastEmailSentTime = 0; 
     function sendResultsEmail(leaderboard) {
-        if (isMultiplayerMode && !isHost) return; // רק המארח שולח מייל למניעת כפילויות
+        if (isMultiplayerMode && !isHost) return; 
         
         const now = Date.now();
         if (now - lastEmailSentTime < 10000) return; 
@@ -403,7 +418,7 @@
         });
         comp.innerHTML = tableHtml + `</tbody></table>`;
         
-        sendResultsEmail(leaderboard); // הפעלת האימייל!
+        sendResultsEmail(leaderboard); 
     }
 
     function playAgainInSameRoom() { if (isMultiplayerMode) socket.emit('backToLobby', currentRoom); else location.reload(); }
