@@ -132,7 +132,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 });
 
 // ==========================================
-// ניהול ניקוד ותוצאות
+// ניהול ניקוד ותוצאות (ללא שליחת מייל)
 // ==========================================
 function calculateAndSendResults(roomId) {
     const room = rooms[roomId];
