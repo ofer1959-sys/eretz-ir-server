@@ -3,7 +3,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 
 process.on('uncaughtException', (err) => console.error('Uncaught:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
@@ -17,43 +16,15 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const apiKey = (process.env.GEMINI_API_KEY || "MISSING_KEY").trim();
-const emailUser = (process.env.EMAIL_USER || "").trim();
-const emailPass = (process.env.EMAIL_PASS || "").trim();
 
 console.log("=== SERVER STARTUP ===");
 console.log("API Key loaded:", apiKey === "MISSING_KEY" ? "NO" : "YES");
 console.log("✅ שופט AI פעיל: gemini-2.5-flash (גרסה יציבה ומהירה)");
 
-// ==========================================
-// הגדרת מערכת הדיוור - שימוש בניתוב האוטומטי של Gmail
-// ==========================================
-const transporter = nodemailer.createTransport({
-    service: 'gmail', // נותן לספרייה לנהל את הפורטים והחיבורים בצורה חכמה
-    auth: {
-        user: emailUser,
-        pass: emailPass
-    },
-    tls: {
-        rejectUnauthorized: false // מונע שגיאות אבטחה קטנוניות בחיבור משרת חינמי
-    }
-});
-
-if (emailUser && emailPass) {
-    transporter.verify(function(error, success) {
-        if (error) {
-            console.error("שגיאה בחיבור למייל:", error.message);
-        } else {
-            console.log("📧 מערכת הדיוור האוטומטית מוכנה ומחוברת לגוגל!");
-        }
-    });
-} else {
-    console.log("⚠️ חסרים פרטי אימייל (EMAIL_USER / EMAIL_PASS) - לא יישלחו מיילים.");
-}
-
 const rooms = {};
 
 // ==========================================
-// פנייה לג'מיני 2.5 המהיר
+// פנייה לג'מיני
 // ==========================================
 async function askGeminiDirectly(promptText) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -90,7 +61,7 @@ app.get('/api/test-gemini', async (req, res) => {
 });
 
 // ==========================================
-// שופט ה-AI (בדיקה מרוכזת + הגבלת הסבר ל-12 מילים)
+// שופט ה-AI
 // ==========================================
 app.post('/api/ask-judge-batch', async (req, res) => {
     const { letter, items } = req.body;
@@ -121,7 +92,7 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         התשובות לבדיקה:
         ${items.map(i => `- מזהה: "${i.catId}", קטגוריה: "${i.categoryLabel}", תשובה של השחקן: "${i.answer}"`).join('\n')}
 
-        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא עיצוב) במבנה הבא:
+        החזר אך ורק JSON תקין (ללא טקסט נוסף וללא פתיח) במבנה הבא:
         {
           "results": {
             "catId_1": {"points": 10, "reason": "אושר"},
@@ -130,7 +101,6 @@ app.post('/api/ask-judge-batch', async (req, res) => {
         }`;
         
         let isResolved = false;
-        // 25 שניות המתנה כדי למנוע את השגיאה של עומס ברשת
         const timeout = new Promise((resolve) => setTimeout(() => {
             if (!isResolved) resolve({ timeout: true });
         }, 25000));
@@ -162,16 +132,15 @@ app.post('/api/ask-judge-batch', async (req, res) => {
 });
 
 // ==========================================
-// ניהול ניקוד ושליחת מייל
+// ניהול ניקוד ותוצאות
 // ==========================================
-function calculateAndSendResults(roomId, isAppeal = false) {
+function calculateAndSendResults(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     
     const minTime = Math.min(...room.players.filter(p => p.time < 999).map(p => p.time));
     room.players.forEach(p => {
         let score = p.baseScore || 0; 
-        
         if (minTime > 0 && minTime !== Infinity && p.time < 999) {
             const excessRatio = (p.time - minTime) / minTime;
             if (excessRatio > 0.50) {
@@ -188,44 +157,6 @@ function calculateAndSendResults(roomId, isAppeal = false) {
     });
 
     io.to(roomId).emit('gameOver', room.players);
-
-    // שליחת אימייל עם תוצאות
-    if (emailUser && emailPass && (!room.emailSent || isAppeal)) {
-        room.emailSent = true; 
-        
-        let subjectText = isAppeal ? `עדכון תוצאות לאחר ערעור - אות ${room.letter}` : `תוצאות ארץ עיר - אות ${room.letter}`;
-        let emailHtml = `<h2 style="color:#4a90e2; text-align:center;">${subjectText}</h2>
-                         <table border="1" cellpadding="10" cellspacing="0" style="margin: 0 auto; width: 100%; max-width: 600px; text-align: center; border-collapse: collapse;">
-                            <tr style="background-color: #f5a623; color: white;">
-                                <th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן (שניות)</th>
-                            </tr>`;
-        
-        room.players.forEach((p, idx) => {
-            emailHtml += `<tr>
-                            <td>${idx+1}</td>
-                            <td style="font-weight:bold;">${p.name}</td>
-                            <td style="color:green; font-weight:bold;">${p.finalScore}</td>
-                            <td>${p.time === 999 ? 'פרש' : p.time}</td>
-                          </tr>`;
-        });
-        
-        emailHtml += `</table><br><p style="text-align:center;">נשלח אוטומטית מהשרת של סבא עופר 👑</p>`;
-
-        const mailOptions = {
-            from: emailUser,
-            to: emailUser,
-            subject: subjectText,
-            html: `<div dir="rtl">${emailHtml}</div>`
-        };
-
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.error("שגיאה בשליחת המייל:", error.message);
-            } else {
-                console.log("📧 מייל סיכום משחק נשלח בהצלחה!");
-            }
-        });
-    }
 }
 
 // ==========================================
@@ -236,15 +167,7 @@ io.on('connection', (socket) => {
         const roomId = Math.random().toString(36).substring(2, 6).toUpperCase();
         const letters = "אבגדהזחטיכלמנסעפצקרשת";
         const gameLetter = letters[Math.floor(Math.random() * letters.length)];
-        
-        rooms[roomId] = { 
-            players: [], 
-            letter: gameLetter, 
-            submittedCount: 0, 
-            gameStarted: false,
-            emailSent: false,
-            disabledCategories: data.disabledCategories || []
-        };
+        rooms[roomId] = { players: [], letter: gameLetter, submittedCount: 0, gameStarted: false, disabledCategories: data.disabledCategories || [] };
         socket.join(roomId);
         rooms[roomId].players.push({ id: socket.id, name: data.hostName, isHost: true, hasSubmitted: false });
         socket.emit('roomCreated', { roomId, letter: gameLetter, players: rooms[roomId].players, disabledCategories: rooms[roomId].disabledCategories });
@@ -254,19 +177,16 @@ io.on('connection', (socket) => {
         let room = rooms[roomId];
         if (!room) {
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
-            rooms[roomId] = { players: [], letter: letters[Math.floor(Math.random() * letters.length)], submittedCount: 0, gameStarted: false, emailSent: false, disabledCategories: [] };
+            rooms[roomId] = { players: [], letter: letters[Math.floor(Math.random() * letters.length)], submittedCount: 0, gameStarted: false, disabledCategories: [] };
             room = rooms[roomId];
         }
-
         const existingPlayer = room.players.find(p => p.name === playerName);
         if (existingPlayer) {
-            existingPlayer.id = socket.id; 
-            if (isHostClaim) existingPlayer.isHost = true;
+            existingPlayer.id = socket.id; if (isHostClaim) existingPlayer.isHost = true;
         } else {
             const hasHost = room.players.some(p => p.isHost);
             room.players.push({ id: socket.id, name: playerName, isHost: isHostClaim || !hasHost, hasSubmitted: false });
         }
-        
         socket.join(roomId);
         const myPlayer = room.players.find(p => p.name === playerName);
         socket.emit('roomJoined', { roomId, letter: room.letter, isHost: myPlayer.isHost, disabledCategories: room.disabledCategories });
@@ -275,40 +195,21 @@ io.on('connection', (socket) => {
 
     socket.on('startGame', (data) => {
         const roomId = data.roomId;
-        if(rooms[roomId]) {
-            rooms[roomId].gameStarted = true;
-            io.to(roomId).emit('gameStarted', { 
-                letter: rooms[roomId].letter, 
-                disabledCategories: rooms[roomId].disabledCategories 
-            });
-        }
+        if(rooms[roomId]) { rooms[roomId].gameStarted = true; io.to(roomId).emit('gameStarted', { letter: rooms[roomId].letter, disabledCategories: rooms[roomId].disabledCategories }); }
     });
 
-    socket.on('announceFinish', ({ roomId, playerName }) => {
-        io.to(roomId).emit('playerAnnouncedFinish', playerName);
-    });
+    socket.on('announceFinish', ({ roomId, playerName }) => { io.to(roomId).emit('playerAnnouncedFinish', playerName); });
 
     socket.on('submitScore', ({ roomId, totalScore, timeInSeconds, answers }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('gameError', 'השרת איבד את החדר. נאלץ להתחיל משחק חדש.');
-        
         const player = room.players.find(p => p.id === socket.id);
         if (player && !player.hasSubmitted) {
-            player.baseScore = totalScore;
-            player.time = timeInSeconds;
-            player.answers = answers;
-            player.hasSubmitted = true;
+            player.baseScore = totalScore; player.time = timeInSeconds; player.answers = answers; player.hasSubmitted = true;
             room.submittedCount++;
-            
             const waitingFor = room.players.filter(p => !p.hasSubmitted).map(p => p.name);
-            io.to(roomId).emit('playerFinishedStatus', {
-                playerName: player.name,
-                submittedCount: room.submittedCount,
-                totalPlayers: room.players.length,
-                waitingFor: waitingFor
-            });
-
-            if (room.submittedCount === room.players.length) calculateAndSendResults(roomId, false);
+            io.to(roomId).emit('playerFinishedStatus', { playerName: player.name, submittedCount: room.submittedCount, totalPlayers: room.players.length, waitingFor: waitingFor });
+            if (room.submittedCount === room.players.length) calculateAndSendResults(roomId);
         }
     });
 
@@ -316,16 +217,10 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         if (!room) return;
         const player = room.players.find(p => p.name === playerName);
-        if (player) {
-            player.baseScore = newTotalScore;
-            player.answers = answers;
-            calculateAndSendResults(roomId, true);
-        }
+        if (player) { player.baseScore = newTotalScore; player.answers = answers; calculateAndSendResults(roomId); }
     });
 
-    socket.on('announceAppeal', ({ roomId, playerName }) => {
-        io.to(roomId).emit('appealStarted', playerName);
-    });
+    socket.on('announceAppeal', ({ roomId, playerName }) => { io.to(roomId).emit('appealStarted', playerName); });
 
     socket.on('forceEndGame', (data) => {
         const room = rooms[data.roomId];
@@ -333,29 +228,17 @@ io.on('connection', (socket) => {
         const host = room.players.find(p => p.id === socket.id);
         if (host && host.isHost) {
             if (!host.hasSubmitted && data.forceHostSubmit) {
-                host.baseScore = data.myTotalScore || 0;
-                host.time = data.myTime || 999;
-                host.answers = data.myAnswers || {};
-                host.hasSubmitted = true;
-                room.submittedCount++;
+                host.baseScore = data.myTotalScore || 0; host.time = data.myTime || 999; host.answers = data.myAnswers || {}; host.hasSubmitted = true; room.submittedCount++;
             }
-            room.players.forEach(p => {
-                if (!p.hasSubmitted) {
-                    p.hasSubmitted = true;
-                    p.baseScore = 0; p.time = 999; p.answers = {};
-                    room.submittedCount++;
-                }
-            });
-            calculateAndSendResults(data.roomId, false);
+            room.players.forEach(p => { if (!p.hasSubmitted) { p.hasSubmitted = true; p.baseScore = 0; p.time = 999; p.answers = {}; room.submittedCount++; } });
+            calculateAndSendResults(data.roomId);
         }
     });
 
     socket.on('backToLobby', (roomId) => {
         const room = rooms[roomId];
         if (room) {
-            room.gameStarted = false;
-            room.submittedCount = 0;
-            room.emailSent = false;
+            room.gameStarted = false; room.submittedCount = 0;
             const letters = "אבגדהזחטיכלמנסעפצקרשת";
             room.letter = letters[Math.floor(Math.random() * letters.length)];
             room.players.forEach(p => { p.hasSubmitted = false; p.baseScore = 0; p.time = 0; p.answers = {}; p.finalScore = 0; });
@@ -369,17 +252,12 @@ io.on('connection', (socket) => {
             const playerIndex = room.players.findIndex(p => p.id === socket.id);
             if (playerIndex !== -1) {
                 if (!room.gameStarted) {
-                    room.players.splice(playerIndex, 1);
-                    io.to(roomId).emit('updatePlayers', room.players);
+                    room.players.splice(playerIndex, 1); io.to(roomId).emit('updatePlayers', room.players);
                 } else if (room.gameStarted && !room.players[playerIndex].hasSubmitted) {
                     setTimeout(() => {
                         if (rooms[roomId] && rooms[roomId].players[playerIndex] && !rooms[roomId].players[playerIndex].hasSubmitted) {
-                            rooms[roomId].players[playerIndex].hasSubmitted = true;
-                            rooms[roomId].players[playerIndex].baseScore = 0;
-                            rooms[roomId].players[playerIndex].time = 999; 
-                            rooms[roomId].players[playerIndex].answers = {};
-                            rooms[roomId].submittedCount++;
-                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId, false);
+                            rooms[roomId].players[playerIndex].hasSubmitted = true; rooms[roomId].players[playerIndex].baseScore = 0; rooms[roomId].players[playerIndex].time = 999; rooms[roomId].players[playerIndex].answers = {}; rooms[roomId].submittedCount++;
+                            if (rooms[roomId].submittedCount === rooms[roomId].players.length) calculateAndSendResults(roomId);
                         }
                     }, 60000); 
                 }
