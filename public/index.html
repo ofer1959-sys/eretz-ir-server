@@ -51,7 +51,7 @@
         <h1 id="welcome-h1">ארץ עיר של סבא עופר <span class="version-badge">גרסה מרושתת וסופית</span></h1>
         
         <div id="join-section" style="display:none; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
-            <p style="font-size: 0.9rem; color:#666;">קיבלת קוד ממשתתף אחר?</p>
+            <p style="font-size: 0.9rem; color:#666;">הכנס את שמך להצטרפות לחדר:</p>
             <input type="text" id="room-code" placeholder="הכנס קוד חדר כאן...">
             <input type="text" id="join-player-name" placeholder="השם שלך...">
             <button class="btn-success" onclick="joinRoom()">הצטרף למשחק הקבוצתי</button>
@@ -144,8 +144,17 @@
     // אתחול EmailJS
     emailjs.init("6haOOG3JbyY2rkE4x");
 
+    function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+    function showJoinSection() { 
+        document.getElementById('btn-show-join').style.display = 'none'; 
+        document.getElementById('join-section').style.display = 'block'; 
+        document.getElementById('category-selection-box').style.display = 'none'; 
+        document.getElementById('welcome-desc').style.display = 'none';
+        document.getElementById('player-name').style.display = 'none';
+    }
+
     // ==========================================
-    // טעינת שם וקטגוריות מהזיכרון המקומי
+    // טעינת שם מהזיכרון ובדיקת קישור וואטסאפ (זנב URL)
     // ==========================================
     window.addEventListener('DOMContentLoaded', () => {
         const savedName = localStorage.getItem('eretzIrName') || sessionStorage.getItem('myName') || '';
@@ -161,6 +170,14 @@
                 if (cb) cb.checked = true;
             });
         } catch(e) {}
+
+        // בדיקה אם השחקן נכנס דרך קישור הזמנה של וואטסאפ עם קוד חדר
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        if (roomParam) {
+            document.getElementById('room-code').value = roomParam.toUpperCase();
+            showJoinSection(); // פותח את אזור ההצטרפות אוטומטית לשחקן המוזמן
+        }
     });
 
     const RAW_DATA = {
@@ -218,31 +235,10 @@
     let isHost = sessionStorage.getItem('isHost') === 'true';
     let myName = sessionStorage.getItem('myName') || '';
 
-    function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-    function showJoinSection() { document.getElementById('btn-show-join').style.display = 'none'; document.getElementById('join-section').style.display = 'block'; document.getElementById('category-selection-box').style.display = 'none'; }
     function getDisabledCategories() { return Array.from(document.querySelectorAll('.cat-disable-cb:checked')).map(cb => cb.value); }
 
     // ==========================================
-    // פונקציות וואטסאפ מתוקנות
-    // ==========================================
-    function shareRoomWhatsApp() {
-        const roomToShare = document.getElementById('display-room-code').innerText || currentRoom;
-        const msg = `בואו לשחק איתי ארץ עיר!\nקוד החדר: *${roomToShare}*\nכנסו לכאן: ${window.location.href}`;
-        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-    }
-
-    function shareResultsWhatsApp() {
-        let msg = `*תוצאות ארץ עיר - אות ${currentLetter}*\n\n`;
-        const rows = document.querySelectorAll('#leaderboard-body tr');
-        rows.forEach(row => {
-            const cols = row.querySelectorAll('td');
-            msg += `${cols[0].innerText}. ${cols[1].innerText} - ${cols[2].innerText} נק' (${cols[3].innerText})\n`;
-        });
-        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
-    }
-
-    // ==========================================
-    // הצגת שחקנים מחוברים (תוקן!)
+    // הצגת שחקנים מחוברים
     // ==========================================
     function updatePlayersList(players) {
         const list = document.getElementById('players-list');
@@ -256,6 +252,27 @@
     socket.on('updatePlayers', (players) => {
         updatePlayersList(players);
     });
+
+    // ==========================================
+    // פונקציות וואטסאפ מתוקנות עם URL
+    // ==========================================
+    function shareRoomWhatsApp() {
+        const roomToShare = document.getElementById('display-room-code').innerText || currentRoom;
+        // יצירת הקישור עם קוד החדר בתוכו!
+        const link = window.location.origin + window.location.pathname + '?room=' + roomToShare;
+        const msg = `בואו לשחק איתי ארץ עיר!\nקוד החדר: *${roomToShare}*\nכנסו להצטרף: ${link}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    function shareResultsWhatsApp() {
+        let msg = `*תוצאות ארץ עיר - אות ${currentLetter}*\n\n`;
+        const rows = document.querySelectorAll('#leaderboard-body tr');
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td');
+            msg += `${cols[0].innerText}. ${cols[1].innerText} - ${cols[2].innerText} נק' (${cols[3].innerText})\n`;
+        });
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    }
 
     function startSoloGame() {
         myName = document.getElementById('player-name').value.trim();
@@ -293,6 +310,10 @@
 
         isMultiplayerMode = true; isHost = false;
         sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'false'); sessionStorage.setItem('currentRoom', room);
+        
+        // מחיקת הפרמטר מה-URL כדי שלא יפריע להצטרפות הבאה או רענון
+        window.history.replaceState({}, document.title, window.location.pathname);
+
         socket.emit('joinRoom', { roomId: room, playerName: myName, isHostClaim: false });
         showScreen('lobby'); document.getElementById('display-room-code').innerText = room; document.getElementById('waiting-msg').style.display = 'block';
     }
