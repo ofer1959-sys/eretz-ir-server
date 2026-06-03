@@ -8,6 +8,13 @@ process.on('uncaughtException', (err) => console.error('Uncaught:', err));
 process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
 
 const app = express();
+// מערכת הפניה חכמה לכתובת החדשה
+app.use((req, res, next) => {
+    if (process.env.REDIRECT_URL) {
+        return res.redirect(301, process.env.REDIRECT_URL + req.url);
+    }
+    next();
+});
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
