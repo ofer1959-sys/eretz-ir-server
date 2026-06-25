@@ -2,14 +2,20 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=https://eretz-ir.saba-ofer.com/" />
-    <title>מעביר לשרת המשחק...</title>
+    <title>ארץ עיר</title>
+    
+    <!-- ההפניה החכמה: פועלת רק אם מזהה את הכתובת הישנה של רנדר -->
     <script>
-        window.location.replace("https://eretz-ir.saba-ofer.com/");
+        if (window.location.hostname.includes("onrender.com")) {
+            window.location.replace("https://eretz-ir.saba-ofer.com" + window.location.pathname);
+        }
     </script>
 </head>
 <body>
-    <p>ארץ עיר עבר לכתובת חדשה. מעביר אותך כעת...</p>
-    <p>אם לא הועברת אוטומטית, <a href="https://eretz-ir.saba-ofer.com/">לחץ כאן</a>.</p>
+    
+    <!-- הערה חשובה: כאן בדיוק צריך להופיע הקוד האמיתי של המשחק שלך -->
+    <!-- עליך להדביק כאן את תוכן המשחק (הכפתורים, טופס המשחק ושאר האלמנטים של ארץ עיר) -->
+    <!-- במקום טקסט ההפניה הישן שהיה כאן בעבר -->
+
 </body>
 </html>
