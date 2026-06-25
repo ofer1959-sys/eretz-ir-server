@@ -2,20 +2,659 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>ארץ עיר</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ארץ עיר של סבא עופר</title>
     
-    <!-- ההפניה החכמה: פועלת רק אם מזהה את הכתובת הישנה של רנדר -->
     <script>
         if (window.location.hostname.includes("onrender.com")) {
             window.location.replace("https://eretz-ir.saba-ofer.com" + window.location.pathname);
         }
     </script>
+
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        :root { --primary: #4a90e2; --secondary: #f5a623; --success: #7ed321; --danger: #d0021b; --bg: #f0f4f8; --text: #333; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; direction: rtl;}
+        .container { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 95%; max-width: 800px; text-align: center; margin: 20px 0; display: flex; flex-direction: column;}
+        h1 { color: var(--primary); font-size: 2.2rem; margin-bottom: 0.5rem; }
+        .version-badge { font-size: 0.5em; color: white; background-color: var(--success); padding: 5px 10px; border-radius: 20px; vertical-align: middle;}
+        .screen { display: none; flex-direction: column; } .active { display: flex; }
+        input[type="text"] { width: 100%; padding: 12px; margin: 5px 0; border: 2px solid #ddd; border-radius: 10px; font-size: 1.1rem; box-sizing: border-box; }
+        button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-size: 1.2rem; font-weight: bold; width: 100%; margin-top: 10px; transition: transform 0.1s;}
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-host { background: #8e44ad; color: white; margin-top: 15px;}
+        .btn-skip { background: #eee; color: #666; width: auto; padding: 8px 15px; font-size: 0.9rem; margin-right: 10px; }
+        .countdown { font-size: 8rem; color: var(--primary); font-weight: bold; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        .letter-display { font-size: 6rem; color: var(--secondary); font-weight: bold; margin: 1rem 0; }
+        .category-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; text-align: right; }
+        .category-row label { width: 110px; font-weight: bold; font-size: 1.1rem; }
+        .category-row input { margin: 0; flex-grow: 1; }
+        .timer { font-size: 1.5rem; color: #666; margin-bottom: 1rem; font-weight: bold; }
+        .leaderboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .leaderboard-table th, .leaderboard-table td { padding: 10px; border-bottom: 1px solid #ddd; text-align: center; }
+        .leaderboard-table th { background-color: var(--primary); color: white; }
+        .leaderboard-table tr:nth-child(even) { background-color: #f9f9f9; }
+        .comparison-table { min-width: 100%; font-size: 0.9rem; }
+        .comparison-table th { background-color: #34495e; color: white; }
+        .comparison-table td { vertical-align: middle; border: 1px solid #eee;}
+        .checkbox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; text-align: right; font-size: 1rem; margin-top: 10px; }
+        .checkbox-grid label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+        .checkbox-grid input[type="checkbox"] { width: auto; transform: scale(1.2); margin: 0; }
+        ul { list-style-type: none; padding: 0; }
+        li.player-item { background: #f0f4f8; padding: 10px; margin: 5px 0; border-radius: 8px; font-weight: bold; }
+        
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+        @keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeout { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+        
+        .summary-box { background: #f9f9f9; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 2px solid var(--primary); }
+        .summary-box h3 { margin-top: 0; color: var(--secondary); }
+    </style>
 </head>
 <body>
-    
-    <!-- הערה חשובה: כאן בדיוק צריך להופיע הקוד האמיתי של המשחק שלך -->
-    <!-- עליך להדביק כאן את תוכן המשחק (הכפתורים, טופס המשחק ושאר האלמנטים של ארץ עיר) -->
-    <!-- במקום טקסט ההפניה הישן שהיה כאן בעבר -->
 
+<div id="toast-container"></div>
+
+<div class="container">
+    <div id="welcome" class="screen active">
+        <h1 id="welcome-h1">ארץ עיר של סבא עופר <span class="version-badge">גרסה מרושתת וסופית</span></h1>
+        
+        <div id="join-section" style="display:none; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px;">
+            <p style="font-size: 0.9rem; color:#666;">הכנס את שמך להצטרפות לחדר:</p>
+            <input type="text" id="room-code" placeholder="הכנס קוד חדר כאן...">
+            <input type="text" id="join-player-name" placeholder="השם שלך...">
+            <button class="btn-success" onclick="joinRoom()">הצטרף למשחק הקבוצתי</button>
+        </div>
+
+        <p id="welcome-desc" style="font-weight:bold; color:var(--primary); font-size:1.2rem;">הכניסו שם ונתחיל!</p>
+        <input type="text" id="player-name" placeholder="השם שלך..." style="margin-bottom: 15px;">
+        
+        <div id="category-selection-box" style="background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 20px; text-align: center;">
+            <p style="margin-top:0; color:var(--secondary); font-weight: bold;">סמן את הקטגוריות לביטול במשחק זה:</p>
+            <div class="checkbox-grid">
+                <label><input type="checkbox" class="cat-disable-cb" value="countries"> מדינה</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="localities"> יישוב</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="capitals"> עיר בירה</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="body_parts"> איבר גוף</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="foods"> מאכל</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="plants"> צומח</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="animals"> בעל חיים</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="boys"> שם בן</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="girls"> שם בת</label>
+                <label><input type="checkbox" class="cat-disable-cb" value="professions"> מקצוע</label>
+            </div>
+        </div>
+        
+        <div id="solo-buttons">
+            <button class="btn-primary" onclick="startSoloGame()">שחק לבד מול השעון</button>
+            <button class="btn-host" onclick="createRoom()">ארח משחק קבוצתי</button>
+            <button class="btn-success" onclick="showJoinSection()" id="btn-show-join" style="margin-top:15px; background-color:#27ae60;">הוזמנתי למשחק</button>
+        </div>
+    </div>
+
+    <div id="lobby" class="screen">
+        <h2>חדר המתנה קבוצתי</h2>
+        <p>קוד החדר שלכם: <strong id="display-room-code" style="font-size:2rem; color:var(--secondary);"></strong></p>
+        <button class="btn-success" onclick="shareRoomWhatsApp()" style="margin-bottom: 15px;">שלח הזמנה בוואטסאפ 📱</button>
+        
+        <h3>שחקנים מחוברים:</h3>
+        <ul id="players-list"></ul>
+        
+        <div id="host-controls" style="display:none; margin-top: 20px;">
+            <button class="btn-primary" onclick="startGameForAll()" id="btn-start-game-all">התחל משחק לכולם!</button>
+        </div>
+        <p id="waiting-msg" style="display:none; color: var(--primary); font-weight: bold; margin-top: 20px;">ממתין שמנהל החדר יתחיל את המשחק...</p>
+    </div>
+
+    <div id="countdown-screen" class="screen"><div id="number" class="countdown">3</div></div>
+
+    <div id="letter-screen" class="screen">
+        <h2>האות שנבחרה היא:</h2>
+        <div id="selected-letter" class="letter-display">א</div>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div class="timer" id="timer-display">זמן: 00:00</div>
+        <h2 id="game-letter-header" style="color: var(--primary);">אות: א</h2>
+        <div id="categories-container"></div>
+        <button class="btn-primary" id="submit-btn" onclick="submitGame()" style="margin-top: 20px; font-size: 1.5rem; padding: 15px;">סיימתי!</button>
+    </div>
+
+    <div id="waiting-results" class="screen">
+        <h2 style="color: var(--success); font-size: 2.5rem;">סיימת!</h2>
+        <p id="checking-status" style="font-weight: bold; color: var(--primary); margin: 20px 0; font-size: 1.2rem;">התשובות שלך נבדקות כעת על ידי שופט ה-AI...</p>
+        <p id="wait-for-others-msg" style="color: #666; font-size: 1.1rem; display:none;">אנא המתן עד ששאר השחקנים יסיימו.</p>
+        
+        <div id="host-updates" style="margin-top: 20px; padding: 15px; background: #fff8e1; border-radius: 10px; display: none; text-align: right;">
+            <strong style="color: var(--primary); font-size: 1.2rem;">ניהול חדר:</strong>
+            <div id="host-updates-list" style="margin-top: 10px; font-size: 1.1rem; color: #333; font-weight: bold;"></div>
+            <button id="force-end-btn" class="btn-danger" style="width: 100%; padding: 15px; font-size: 1.2rem; margin-top: 15px;" onclick="forceEndGame()">הצג תוצאות עכשיו לכולם</button>
+        </div>
+    </div>
+
+    <div id="results" class="screen">
+        <h1 id="winner-announcement" style="color: var(--success); font-size: 2rem; margin-bottom: 5px;"></h1>
+        
+        <table class="leaderboard-table">
+            <thead><tr><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן</th></tr></thead>
+            <tbody id="leaderboard-body"></tbody>
+        </table>
+
+        <div id="answers-comparison-container" style="margin-top: 20px;"></div>
+
+        <div style="margin-top: 30px; display: flex; flex-direction: column; gap: 10px;">
+            <button class="btn-primary" onclick="playAgainInSameRoom()" style="font-size: 1.3rem;">רוצים משחק נוסף? (כן!) 🎮</button>
+            
+            <button id="btn-end-session" class="btn-danger" style="display:none; padding: 15px; font-size: 1.3rem;" onclick="endSessionAndShowSummary()">סיום והצגת התוצאות</button>
+        </div>
+    </div>
+
+    <div id="summary-screen" class="screen">
+        <h1 style="color: var(--primary); font-size: 2.5rem; margin-bottom: 20px;">סיכום המפגש 🏆</h1>
+        <div id="summary-content" style="text-align: right; width: 100%;"></div>
+        <button class="btn-success" onclick="location.reload()" style="margin-top: 30px; font-size: 1.2rem;">סיים וחזור למסך הראשי</button>
+    </div>
+</div>
+
+<script>
+    // אתחול EmailJS וניהול זיכרון
+    emailjs.init("6haOOG3JbyY2rkE4x");
+    window.gameSessionHistory = []; 
+
+    function showScreen(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+    
+    function showJoinSection() { 
+        document.getElementById('btn-show-join').style.display = 'none'; 
+        document.getElementById('join-section').style.display = 'block'; 
+        document.getElementById('category-selection-box').style.display = 'none'; 
+        document.getElementById('welcome-desc').style.display = 'none';
+        document.getElementById('player-name').style.display = 'none';
+    }
+
+    // פונקציית הודעה צפה (Toast)
+    function showToast(message) {
+        const toast = document.createElement('div');
+        toast.style.background = 'rgba(74, 144, 226, 0.95)';
+        toast.style.color = 'white';
+        toast.style.padding = '15px 25px';
+        toast.style.borderRadius = '10px';
+        toast.style.fontWeight = 'bold';
+        toast.style.fontSize = '1.2rem';
+        toast.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+        toast.style.animation = 'fadein 0.5s, fadeout 0.5s 2.5s';
+        toast.innerText = message;
+        
+        const container = document.getElementById('toast-container');
+        container.appendChild(toast);
+        setTimeout(() => { toast.remove(); }, 3000);
+    }
+
+    // פונקציית הקראת מנצח (TTS)
+    function announceWinner(winnerName) {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(`המשחק הסתיים! המנצח הוא ${winnerName}`);
+            utterance.lang = 'he-IL';
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const savedName = localStorage.getItem('eretzIrName') || sessionStorage.getItem('myName') || '';
+        if (savedName) {
+            document.getElementById('player-name').value = savedName;
+            document.getElementById('join-player-name').value = savedName;
+        }
+
+        try {
+            const savedCats = JSON.parse(localStorage.getItem('eretzIrDisabledCats') || '[]');
+            savedCats.forEach(catId => {
+                const cb = document.querySelector(`.cat-disable-cb[value="${catId}"]`);
+                if (cb) cb.checked = true;
+            });
+        } catch(e) {}
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomParam = urlParams.get('room');
+        if (roomParam) {
+            document.getElementById('room-code').value = roomParam.toUpperCase();
+            showJoinSection(); 
+        }
+    });
+
+    const RAW_DATA = {
+        capitals: `אבו דאבי,אבוג'ה,אקרה,אדיס אבבה,עדן,אלג'יר,עמאן,אמסטרדם,אנדורה לה ולה,אנקרה,אנטננריבו,אפיה,אשגבאט,אסמרה,אסטנה,אסונסיון,אתונה,בגדאד,באקו,במקו,בנדר סרי בגוואן,בנגקוק,בנגי,בנג'ול,בסטרה,בייג'ינג,ביירות,בלגרד,בלמופן,ברלין,ברן,בישקק,ביסאו,בלומפונטיין,בוגוטה,ברזיליה,ברטיסלאבה,ברזוויל,ברידג'טאון,בריסל,בוקרשט,בודפשט,בואנוס איירס,בוג'ומבורה,קהיר,קנברה,קייפטאון,קראקס,קסטריז,קישינב,קולומבו,קונאקרי,קופנהגן,קוטונו,דקר,דמשק,דאר א-סלאם,דאקה,דילי,ג'יבוטי,דודומה,דוחה,דבלין,דושנבה,פריטאון,פונפוטי,גאבורון,ג'ורג'טאון,גיטגה,גואטמלה סיטי,האנוי,הארארה,הוואנה,הלסינקי,הוניארה,אסלאמאבאד,ג'קרטה,ירושלים,ג'ובה,קאבול,קמפלה,קטמנדו,חרטום,קיגאלי,קינגסטון,קינגסטאון,קינשאסה,קואלה לומפור,כווית סיטי,קייב,לה פאס,ליברוויל,לילונגווה,לימה,ליסבון,לובליאנה,לובמבה,לומה,לונדון,לואנדה,לוסקה,לוקסמבורג,מדריד,מג'ורו,מלאבו,מאלה,מנגואה,מנאמה,מנילה,מפוטו,מסרו,מבבנה,מקסיקו סיטי,מינסק,מוגדישו,מונקו,מונרוביה,מונטווידאו,מורוני,מוסקבה,מוסקט,נג'מנה,ניירובי,נסאו,נייפידאו,ניו דלהי,נגרולמוד,ניאמיי,ניקוסיה,נואקשוט,נוקואלופה,אוסלו,אוטווה,ואגאדוגו,פליקיר,פנמה סיטי,פרמריבו,פריז,פאריס,פנום פן,פודגוריצה,פורט לואי,פורט מורסבי,פורט אוף ספיין,פורט וילה,פורט-או-פרנס,פורטו-נובו,פראג,פראיה,פרטוריה,פוטרג'איה,פיונגיאנג,קיטו,רבאט,רייקיאוויק,ריגה,ריאד,רומא,רוזו,סנט ג'ורג'ס,סנט ג'ונס,סן חוסה,סן מרינו,סן סלוודור,צנעא,סנטיאגו,סנטו דומינגו,סרייבו,סיאול,סינגפור,סקופיה,סופיה,דרום טאראווה,סרי ג'איאווארדנפורה קוטה,סטוקהולם,סוקרה,סובה,סאו טומה,טאיפיי,טאלין,טשקנט,טביליסי,טגוסיגלפה,טהרן,האג,ת'ימפו,טירנה,טוקיו,טריפולי,תוניס,טוניס,אולן בטור,ואדוץ,ולטה,קריית הוותיקן,ויקטוריה,וינה,ויינטיאן,וילנה,ורשה,וושינגטון די. סי.,ולינגטון,וינדהוק,יאמוסוקרו,יאונדה,יארן,ירוואן,זאגרב`,
+        countries: `אפגניסטן,אלבניה,אלג'יריה,אנדורה,אנגולה,אנטיגואה וברבודה,ארגנטינה,ארמניה,אוסטרליה,אוסטריה,אזרבייג'ן,איי בהאמה,בחריין,בנגלדש,ברבדוס,בלארוס,בלגיה,בליז,בנין,בהוטן,בוליביה,בוסניה והרצגובינה,בוצוואנה,ברזיל,ברוניי,בולגריה,בורקינה פאסו,בורונדי,כף ורדה,קמבודיה,קמרון,קנדה,הרפובליקה המרכז-אפריקאית,צ'אד,צ'ילה,סין,קולומביה,קומורו,הרפובליקה הדמוקרטית של קונגו,הרפובליקה של קונגו,קוסטה ריקה,חוף השנהב,קרואטיה,קובה,קפריסין,צ'כיה,דנמרק,ג'יבוטי,דומיניקה,הרפובליקה הדומיניקנית,אקוודור,מצרים,אל סלוודור,גינאה המשוונית,אריתריאה,אסטוניה,אסוואטיני,אתיופיה,פיג'י,פינלנד,צרפת,גבון,גמביה,גאורגיה,גרמניה,גאנה,יוון,גרנדה,גואטמלה,גינאה,גינאה-ביסאו,גיאנה,האיטי,הונדורס,הונגריה,איסלנד,הודו,אינדונזיה,איראן,עיראק,אירלנד,ישראל,איטליה,ג'מייקה,יפן,ירדן,קזחסטן,קניה,קיריבטי,קוריאה הצפונית,קוריאה הדרומית,כווית,קירגיזסטן,לאוס,לטביה,לבנון,לסוטו,ליבריה,לוב,ליכטנשטיין,ליטא,לוקסמבורג,מדגסקר,מלאווי,מלזיה,האיים המלדיביים,מאלי,מלטה,איי מרשל,מאוריטניה,מאוריציוס,מקסיקו,מיקרונזיה,מולדובה,מונקו,מונגוליה,מונטנגרו,מרוקו,מוזמביק,מיאנמר,נמיביה,נאורו,נפאל,הולנד,ניו זילנד,ניקרגואה,ניז'ר,ניגריה,מקדוניה הצפונית,נורווגיה,עומאן,פקיסטן,פלאו,פנמה,פפואה גינאה החדשה,פרגוואי,פרו,הפיליפינים,פולין,פורטוגל,קטר,רומניה,רוסיה,רואנדה,סנט קיטס ונוויס,סנט לוסיה,סנט וינסנט והגרנדינים,סמואה,סן מרינו,סאו טומה ופרינסיפה,ערב הסעודית,סנגל,סרביה,סיישל,סיירה לאון,סינגפור,סלובקיה,סלובניה,איי שלמה,סומליה,דרום אפריקה,דרום סודן,ספרד,סרי לנקה,סודן,סורינאם,שוודיה,שווייץ,סוריה,טג'יקיסטן,טנזניה,תאילנד,טימור-לסטה,טוגו,טונגה,טרינידד וטובגו,תוניסיה,טורקיה,טורקמניסטן,טובאלו,אוגנדה,אוקראינה,איחוד האמירויות הערביות,הממלכה המאוחדת,ארצות הברית,אורוגוואי,אוזבקיסטן,ונואטו,ונצואלה,וייטנאם,תימן,זמביה,זימבבואה,הכס הקדוש,ותיקן,אנגליה,סקוטלנד,בריטניה,אזרביג'אן,בוטסואנה,בוטצואנה,קמא,קונגו,סלוודור,סלבדור,גיאורגיה,גאנה,צפון קוריאה,דרום קוריאה,מינמר,צפון אירלנד,נורבגיה,פקיסטאן,פיליפינים,סישל,איי סיישל,סיישל,דובאי,אבו דאבי,איחוד האמירויות,טורקמניסטאן,תורקמניסטאן,ססירה ליאון,סומלילנד,טוניסיה,ויאטנם,ויאטנאם,זימבבווה,שבדיה`,
+        body_parts: `אגן,אגרוף,אגודל,אוזן,אמה,אף,אישון,אצבע,אצבע רגל,בוהן,בית חזה,בטן,גב,גבה,גולגולת,גוף,גרגרת,גרון,דופק,דם,דמעה,ושט,ווריד,וריד,זרוע,זרת,זיעה,חך,חזה,חוליה,טבור,טחול,טוחנת,טחורים,יד,ירך,כבד,כדורית דם,כף היד,כף הרגל,כיס המרה,כליה,כתף,לב,לבלב,לחי,לשון,לוע,לסת,מוח,מיתר קול,מפרק,מצח,מעי,מערכת הנשימה,מרה,מרפק,מקלעת השמש,מפרק הברך,ניב,נחיר,נים,נרתיק,נשימה,סחוס,סוליה,סוגר,סינוס,עצב,עור,עורק,עין,עפעף,עמוד השדרה,עצם,עקב,פה,פין,פיקה,פנים,צוואר,ציפורן,צלע,קיבה,קנה,קרנית,קרקפת,קרסול,רגל,ריאה,ריס,רקה,רחם,שד,שוק,שן,שכמה,שיער,שחלה,שדרה,שפתיים,תא,תוספתן,דגדגן,ראש,מותניים,מותן,מפשעה,שריר`,
+        animals: `אריה,לביאה,נמר,טיגריס,יגואר,פומה,צ'יטה,חתול,כלב,כלב ים,זאב,שועל,תן,צבוע,דוב,פנדה,קואלה,לוטרה,נמייה,סמור,בואש,ראקון,ביבר,סנאי,דורבן,קיפוד,עכבר,חולדה,ירבוע,אוגר,גרביל,ארנב,שפן,סוס,פוני,חמור,זברה,פרד,גמל,נאקה,למה,אלפקה,פרה,עגל,שור,תאו,כבש,טלה,עז,יעל,צבי,אייל,יחמור,אנטילופה,ג'ירפה,פיל,קרנף,היפופוטם,חזיר,קוף,גורילה,שימפנזה,אורנגאוטן,בבון,למור,עצלן,ארמדיל,עטלף,דולפין,לווייתן,אורקה,אריה ים,ניבתן,פרת ים,תנין,אליגטור,צב,נחש,פתן,צפע,קוברה,אנקונדה,פיתון,זיקית,חרדון,שממית,לטאה,איגואנה,זוחל,צפרדע,קרפדה,סלמנדרה,דג,כריש,חתול ים,טונה,סלמון,קרפיון,אמנון,מושט,סרדין,אנשובי,לוקוס,דניס,דג זהב,גופי,צלופח,סוסון ים,מדוזה,אלמוג,כוכב ים,קיפוד ים,דיונון,קלמרי,תמנון,חילזון,חשופית,צדפה,סרטן,לובסטר,חסילון,שרימפס,עכביש,טרנטולה,עקרב,קרציה,חרק,נמלה,דבורה,צרעה,זבוב,יתוש,פרפר,עש,חיפושית,פרת משה רבנו,מקק,תיקן,גמל שלמה,שפירית,זחל,חגב,ארבה,צרצר,פשפש,כינה,טרמיט,גחלילית,פרעוש,ג'וק,תולעת,שלשול,עלוקה,תרנגול,תרנגולת,אפרוח,ברווז,אווז,ברבור,יונה,דרור,עורב,עורבני,עיט,נשר,בז,נץ,ינשוף,תנשמת,פינגווין,שחף,שקנאי,חסידה,אנפה,פלמינגו,טווס,יען,אמיו,קיווי,תוכי,ארה,קקדו,דררה,קנרית,בולבול,דוכיפת,נקר,סנונית,שלדג,שליו,ראם,ביזון,בופלו,ממותה,כלב דינגו,דינגו,קנגורו,וומבט,סוריקטה,מרמיטה,שונר,לינקס,חפרפרת,חדף,אמו,טוקן,קוליברי,עפרוני,פיראנה,שפמנון,בקלה,הליבוט,פורל,יונק דבש,מיינה,נדל,רב-רגל,שבלול,עטלף פירות`,
+        plants: `אבוקדו,אבטיח,אגוז מלך,אגס,אדר,אוג,אוכמנית,אורן,אזוב,אזובית,אלון,אלוורה,אמנון ותמר,אנונה,אננס,אפונה,אפרסמון,אפרסק,אקליפטוס,ארז,ארטישוק,אשכולית,בזיליקום,בטטה,במיה,בננה,בצל,ברוקולי,ברוש,ג'ינג'ר,גויאבה,גזר,גינקו,גרניום,דובדבן,דולב,דלורית,דלעת,דפנה,דקל,הדס,הדר,היביסקוס,הרדוף,ורד,זוטה לבנה,זוקיני,זית,חבוש,חבצלת,חוביזה,חומוס,חזרת,חיננית,חמוצית,חסה,חציל,חרוב,חרצית,טימין,יסמין,יערה,כוסברה,כורכום,כלנית,כמון,כרוב,כרובית,כרישה,לבנדר,לואיזה,לוע הארי,ליים,לימון,ליצ'י,לפת,מלון,מלפפון,מנגו,מנגולד,מנדרינה,מנטה,נענע,מקדמיה,מרווה,משמש,נורית,נקטרינה,סביון,סברס,סחלב,סיגלית,סלק,סלרי,עגבנייה,עולש,עירית,ענב,ערבה,פאפאיה,פול,פומלה,פטוניה,פטרוזיליה,פטרייה,פיג'ויה,פיטנגו,פיסטוק,פיקוס,פלפל,פסיפלורה,פקאן,פרג,פרי הדר,צבר,ציפורן,צנון,צנונית,קולורבי,קומקוואט,קיווי,קייל,קישוא,קלמנטינה,קמומיל,קנאביס,קפה,קקטוס,קרוטון,קרמבולה,רוזמרין,רוקט,ריחן,רימון,רקפת,שום,שומר,שושן,שזיף,שיטה,שסק,שעועית,שקד,תאנה,תבלין,תות,תות שדה,תימין,תירס,תמר,תפוז,תפוח,תפוח אדמה,תרד,דגן,חיטה,שעורה,שיבולת שועל`,
+        professions: `אדריכל,אגרונום,אונקולוג,אופטיקאי,אורולוג,אורתופד,אח,אחות,אינסטלטור,איש אבטחה,איש מכירות,אנימטור,אסטרונום,ארכיאולוג,ביולוג,בלש,במאי,ברמן,גאולוג,גנן,גרפיקאי,דובר,דוגמן,דוקטור,דייל,דיפלומט,דייג,דרמטולוג,היסטוריון,ווטרינר,זגג,זמר,חוקר,חזאי,חייט,חייל,חשמלאי,חקלאי,חובש,טבח,טייח,טייס,טכנאי,יינן,ימאי,כימאי,כלכלן,כבאי,כנר,כתב,מאייר,מאמן,מאפר,מדריך,מהנדס,מוזיקאי,מורה,מחנך,מחסנאי,מטפל,מכונאי,מלצר,מנהל,מנקה,מנעולן,מנתח,מסגר,מעצב,מפיק,מציל,מרצה,משווק,משורר,משפטן,מתכנת,נגר,נהג,נוירולוג,סוכן ביטוח,סופר,סטטיסטיקאי,ספר,ספורטאי,עובד סוציאלי,עורך דין,עיתונאי,פועל בניין,פיזיותרפיסט,פיזיקאי,פסל,פקיד,פרמדיק,פרופסור,פסיכולוג,פסיכיאטר,צורף,צייר,צלם,צבע,קבלן,קונדיטור,קופאי,קלינאי תקשורת,קצין,רואה חשבון,רופא,רוקח,רפד,רצף,רקדן,רתך,שומר,שחקן,שלם,שלמת,שליח,שמאי,שענים,שף,שוטר,שופט,שרברב,תזונאי,תסריטאי,תכשיטן,מאבטח`,
+        boys: `אברהם,אדם,אהרון,אורי,אורן,איתי,איתן,אלי,אליעזר,אמיר,אסף,אריאל,בנימין,בועז,ברוך,ברק,גבריאל,גד,גדעון,גיל,גלעד,דוד,דן,דניאל,הראל,זאב,זכריה,חגי,חיים,חנוך,טל,יגאל,יהודה,יואב,יואל,יוחנן,יונה,יונתן,יוסף,יורם,יצחק,ישי,ישראל,ליאור,מאיר,מיכאל,מנחם,מרדכי,משה,נועם,נחום,ניר,נתן,סער,עדו,עוזי,עומר,עופר,עוז,עזר,עלי,עמנואל,עמוס,עמירם,עמית,עקיבא,פלג,פנחס,פסח,צבי,ציון,רועי,רון,רונן,רז,רמי,רן,רפאל,שאול,שגיא,שחר,שי,שלום,שלמה,שמואל,שמעון,שמשון,שרון,תומר,תמיר,אבי,אביב,אביהו,אביחי,אביתר,אבנר,אבשלום,אהוד,אופיר,אור,אלעד,ארז,אריה,אשר,בן,בני,גיא,גולן,גל,דור,דורון,דני,הדר,זיו,חן,יאיר,יובל,יניב,יעקב,ירון,כפיר,כרמל,לירן,מאור,מוטי,מור,מתן,נדב,נחמן,ניסים,ניצן,עידן,ערן,צחי,קובי,ראובן,רם,שגב,שלומי,שניר,תום`,
+        girls: `אביגיל,אביטל,אדל,אור,אורה,אורית,אורלי,איילה,אילנה,אלונה,אסתר,אפרת,אריאלה,בלה,ברכה,בתיה,גאולה,גילה,גלית,דבורה,דגנית,דינה,דליה,דנה,דניאלה,דפנה,הגר,הדס,הדסה,הילה,ורד,זהבה,חווה,חוה,חיה,חנה,טליה,טובה,יונה,יוכבד,יעל,יפה,ירדנה,לאה,לבנה,ליהי,ליה,ליטל,מאירה,מיה,מיכל,מיכאלה,מירב,מלכה,מנוחה,מרגלית,מרים,נועה,נורית,נטלי,נילי,נעמי,נעמה,נעה,סיגל,סיוון,סמדר,עדינה,עדנה,עליזה,ענבל,ענת,עופרה,עפרה,פנינה,צביה,ציונה,ציפי,ציפורה,קרן,רחל,רחלי,רינה,רבקה,רות,רותי,שושנה,שולי,שולמית,שוש,שירה,שירלי,שלומית,שמרית,שני,שרה,שרון,תמר,תקווה,אביבה,אגם,אודליה,אורטל,איילת,איריס,אלה,אלינור,אליס,אפרת,אריאל,בת אל,גבריאלה,גילי,ג'ני,דיאנה,דקלה,הודיה,זהבית,זוהר,זיו,חגית,חן,חני,טלי,טל,יאירה,יובל,יסמין,יפעת,כוכבה,כרמלה,לי,ליאורה,ליאת,ליבי,לילך,לימור,לירון,מאיה,מור,מורן,מזל,מיטל,מירי,מרב,מרינה,נוי,נויה,נחמה,נטע,ניקול,נירה,סבינה,סופי,סופיה,סיגלית,סיון,ספיר,עדי,עידית,עינב,עינת,עלמה,קורין,קרן אור,רוזה,רומי,רוני,רונית,ריקי,ריטה,רעות,רקפת,שגית,שחר,שי,שיר,שלוה,שרי,שרית,תהילה,תמי`
+    };
+
+    function formatScore(num) { return typeof num !== 'number' ? num : (Number.isInteger(num) ? num : Number(num.toFixed(2))); }
+
+    function phoneticNormalize(word) {
+        if (!word) return "";
+        let w = word.trim().replace(/['"־\- ]/g, '').replace(/ך/g, 'כ').replace(/ם/g, 'מ').replace(/ן/g, 'נ').replace(/ף/g, 'פ').replace(/ץ/g, 'צ');
+        if (w.length <= 1) return w;
+        let first = w.charAt(0), rest = w.slice(1).replace(/[יוהא]/g, '').replace(/ת/g, 'ט').replace(/ק/g, 'כ');
+        return first + rest;
+    }
+
+    const NORMALIZED_DATA = {};
+    for (let key in RAW_DATA) {
+        NORMALIZED_DATA[key] = RAW_DATA[key].split(',').map(w => ({ original: w.trim(), phonetic: phoneticNormalize(w.trim()) }));
+    }
+
+    function validateWordLocally(userWord, reqLetter, categoryId) {
+        let cleanUser = userWord.trim().replace(/['"־\- ]/g, '').replace(/ך/g, 'כ').replace(/ם/g, 'מ').replace(/ן/g, 'נ').replace(/ף/g, 'פ').replace(/ץ/g, 'צ');
+        if (!cleanUser.startsWith(reqLetter)) return { matchType: 'none' };
+        let phonUser = phoneticNormalize(userWord);
+        for (let item of NORMALIZED_DATA[categoryId] || []) {
+            if (phonUser === item.phonetic) return { matchType: 'exact' };
+        }
+        return { matchType: 'none' };
+    }
+
+    const CATEGORIES = [
+        { id: 'countries', label: 'מדינה' }, { id: 'localities', label: 'יישוב בישראל' }, { id: 'capitals', label: 'עיר בירה' },
+        { id: 'body_parts', label: 'איבר גוף' }, { id: 'foods', label: 'מאכל' }, { id: 'plants', label: 'צומח' },
+        { id: 'animals', label: 'בעל חיים' }, { id: 'boys', label: 'שם של בן' }, { id: 'girls', label: 'שם של בת' }, { id: 'professions', label: 'מקצוע' }
+    ];
+
+    let activeCategories = [];
+    let currentLetter = '';
+    let startTime, timerInterval;
+    let playerAnswers = {};
+    let isMultiplayerMode = false;
+    let lastTimeInSeconds = 0;
+    let myTotalPoints = 0;
+
+    const socket = io();
+    let currentRoom = sessionStorage.getItem('currentRoom') || '';
+    let isHost = sessionStorage.getItem('isHost') === 'true';
+    let myName = sessionStorage.getItem('myName') || '';
+
+    function getDisabledCategories() { return Array.from(document.querySelectorAll('.cat-disable-cb:checked')).map(cb => cb.value); }
+
+    function updatePlayersList(players) {
+        const list = document.getElementById('players-list');
+        list.innerHTML = '';
+        if(!players) return;
+        players.forEach(p => {
+            list.innerHTML += `<li class="player-item">${p.name} ${p.isHost ? '(מנהל 👑)' : ''}</li>`;
+        });
+    }
+
+    socket.on('updatePlayers', (players) => {
+        updatePlayersList(players);
+    });
+
+    function shareRoomWhatsApp() {
+        const roomToShare = document.getElementById('display-room-code').innerText || currentRoom;
+        const link = window.location.origin + window.location.pathname + '?room=' + roomToShare;
+        const msg = `בואו לשחק איתי ארץ עיר!\nקוד החדר: *${roomToShare}*\nכנסו להצטרף: ${link}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    function shareResultsWhatsApp() {
+        let msg = `*תוצאות ארץ עיר - אות ${currentLetter}*\n\n`;
+        const rows = document.querySelectorAll('#leaderboard-body tr');
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td');
+            msg += `${cols[0].innerText}. ${cols[1].innerText} - ${cols[2].innerText} נק' (${cols[3].innerText})\n`;
+        });
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+    }
+
+    function startSoloGame() {
+        myName = document.getElementById('player-name').value.trim();
+        if (!myName) return alert("הכנס שם!");
+        let disabled = getDisabledCategories();
+        if (disabled.length >= CATEGORIES.length) return alert("חייבים להשאיר לפחות קטגוריה אחת!");
+        
+        localStorage.setItem('eretzIrName', myName);
+        localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
+        
+        activeCategories = CATEGORIES.filter(c => !disabled.includes(c.id));
+        isMultiplayerMode = false; 
+        
+        // איפוס היסטוריה של משחק יחיד קודם
+        window.gameSessionHistory = [];
+        
+        currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random() * 22)];
+        startCountdownSequence();
+    }
+
+    function createRoom() {
+        myName = document.getElementById('player-name').value.trim();
+        if (!myName) return alert("הכנס שם!");
+        let disabled = getDisabledCategories();
+        
+        localStorage.setItem('eretzIrName', myName);
+        localStorage.setItem('eretzIrDisabledCats', JSON.stringify(disabled));
+        
+        // איפוס היסטוריה לחדר חדש
+        window.gameSessionHistory = [];
+        
+        isHost = true; sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'true');
+        socket.emit('createRoom', { hostName: myName, disabledCategories: disabled });
+    }
+
+    function joinRoom() {
+        const nameInput = document.getElementById('join-player-name').value.trim() || document.getElementById('player-name').value.trim();
+        const room = document.getElementById('room-code').value.toUpperCase().trim();
+        if (!nameInput || !room) return alert("הכנס שם וקוד חדר!");
+        
+        myName = nameInput; 
+        localStorage.setItem('eretzIrName', myName);
+
+        // איפוס היסטוריה בהצטרפות לחדר
+        window.gameSessionHistory = [];
+
+        isMultiplayerMode = true; isHost = false;
+        sessionStorage.setItem('myName', myName); sessionStorage.setItem('isHost', 'false'); sessionStorage.setItem('currentRoom', room);
+        
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        socket.emit('joinRoom', { roomId: room, playerName: myName, isHostClaim: false });
+        showScreen('lobby'); document.getElementById('display-room-code').innerText = room; document.getElementById('waiting-msg').style.display = 'block';
+    }
+
+    socket.on('roomCreated', (data) => { 
+        isMultiplayerMode = true; currentRoom = data.roomId; currentLetter = data.letter; 
+        activeCategories = CATEGORIES.filter(c => !(data.disabledCategories || []).includes(c.id)); 
+        document.getElementById('display-room-code').innerText = currentRoom; 
+        document.getElementById('host-controls').style.display = 'block'; 
+        showScreen('lobby'); 
+        updatePlayersList(data.players); 
+    });
+
+    socket.on('roomJoined', (data) => { 
+        currentLetter = data.letter; currentRoom = data.roomId; 
+        activeCategories = CATEGORIES.filter(c => !(data.disabledCategories || []).includes(c.id)); 
+        isHost = data.isHost; 
+        document.getElementById('host-controls').style.display = isHost ? 'block' : 'none'; 
+        document.getElementById('waiting-msg').style.display = isHost ? 'none' : 'block'; 
+        showScreen('lobby'); 
+    });
+
+    function startGameForAll() { socket.emit('startGame', { roomId: currentRoom }); }
+    socket.on('gameStarted', (data) => { currentLetter = data.letter; activeCategories = CATEGORIES.filter(c => !(data.disabledCategories || []).includes(c.id)); startCountdownSequence(); });
+
+    function startCountdownSequence() {
+        showScreen('countdown-screen'); let count = 3; document.getElementById('number').innerText = count;
+        const iv = setInterval(() => { count--; if (count === 0) { clearInterval(iv); document.getElementById('selected-letter').innerText = currentLetter; showScreen('letter-screen'); setTimeout(showGameFields, 2000); } else document.getElementById('number').innerText = count; }, 1000);
+    }
+
+    function showGameFields() {
+        showScreen('game-screen'); document.getElementById('game-letter-header').innerText = "האות היא: " + currentLetter;
+        
+        document.getElementById('host-updates').style.display = 'none';
+        document.getElementById('force-end-btn').style.display = 'none';
+        document.getElementById('host-updates-list').innerText = '';
+        document.getElementById('wait-for-others-msg').style.display = 'none';
+        document.getElementById('checking-status').innerText = 'התשובות שלך נבדקות כעת...';
+
+        const submitBtn = document.getElementById('submit-btn'); submitBtn.disabled = false; submitBtn.innerText = "סיימתי!";
+        const container = document.getElementById('categories-container'); container.innerHTML = '';
+        activeCategories.forEach(cat => { container.innerHTML += `<div class="category-row"><label>${cat.label}</label><input type="text" id="input-${cat.id}" placeholder="ב-${currentLetter}..."><button class="btn-skip" onclick="document.getElementById('input-${cat.id}').value='---'">דלג</button></div>`; });
+        startTime = Date.now(); timerInterval = setInterval(() => { const elapsed = Math.floor((Date.now() - startTime) / 1000); document.getElementById('timer-display').innerText = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`; }, 1000);
+    }
+
+    async function submitGame() {
+        clearInterval(timerInterval); lastTimeInSeconds = Math.floor((Date.now() - startTime) / 1000);
+        const submitBtn = document.getElementById('submit-btn'); submitBtn.disabled = true; submitBtn.innerText = "מעבד...";
+        
+        myTotalPoints = 0; playerAnswers = {};
+        const pointsPerQuestion = 100 / activeCategories.length;
+        let itemsToJudge = []; 
+
+        activeCategories.forEach(cat => {
+            const val = document.getElementById('input-' + cat.id).value.trim();
+            if (val === "---" || val === "") {
+                playerAnswers[cat.label] = { val: "דלג", isCorrect: false, points: 0, feedback: "", catId: cat.id };
+            } else {
+                const res = validateWordLocally(val, currentLetter, cat.id);
+                if (res.matchType === 'exact') {
+                    playerAnswers[cat.label] = { val: val, isCorrect: true, points: formatScore(pointsPerQuestion), feedback: "אושר אוטומטית", catId: cat.id };
+                    myTotalPoints += pointsPerQuestion;
+                } else {
+                    playerAnswers[cat.label] = { val: val, isCorrect: false, points: 0, feedback: "בבדיקה...", catId: cat.id };
+                    itemsToJudge.push({ catId: cat.id, categoryLabel: cat.label, answer: val });
+                }
+            }
+        });
+
+        showScreen('waiting-results');
+        
+        if (itemsToJudge.length > 0) {
+            document.getElementById('checking-status').innerText = "שופט ה-AI בודק את התשובות שלך...";
+            try {
+                const response = await fetch('/api/ask-judge-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ letter: currentLetter, items: itemsToJudge })
+                });
+                const data = await response.json();
+                
+                itemsToJudge.forEach(item => {
+                    const resItem = data.results[item.catId];
+                    if (resItem) {
+                        let p = resItem.points === 10 ? pointsPerQuestion : (resItem.points === 5 ? pointsPerQuestion / 2 : 0);
+                        playerAnswers[item.categoryLabel].points = formatScore(p);
+                        playerAnswers[item.categoryLabel].isCorrect = p > 0;
+                        playerAnswers[item.categoryLabel].feedback = resItem.reason;
+                        myTotalPoints += p;
+                    }
+                });
+            } catch (e) {
+                console.error("שגיאה בחיבור ל-AI", e);
+                itemsToJudge.forEach(item => {
+                    playerAnswers[item.categoryLabel].points = formatScore(pointsPerQuestion / 2);
+                    playerAnswers[item.categoryLabel].feedback = "אושר חלקית (תקלת רשת)";
+                    myTotalPoints += (pointsPerQuestion / 2);
+                });
+            }
+        }
+
+        myTotalPoints = formatScore(myTotalPoints);
+        document.getElementById('checking-status').innerText = "הבדיקה הסתיימה!";
+
+        if (isMultiplayerMode) {
+            document.getElementById('wait-for-others-msg').style.display = 'block';
+            if (isHost) {
+                document.getElementById('host-updates').style.display = 'block';
+                document.getElementById('force-end-btn').style.display = 'block';
+                document.getElementById('host-updates-list').innerText = "ממתין לעדכון משרת המשחק...";
+            }
+            socket.emit('submitScore', { roomId: currentRoom, totalScore: myTotalPoints, timeInSeconds: lastTimeInSeconds, answers: playerAnswers });
+        } else {
+            showFinalResults([{ name: myName, score: myTotalPoints, finalScore: myTotalPoints, time: lastTimeInSeconds, answers: playerAnswers }], { name: myName, answers: playerAnswers });
+        }
+    }
+
+    socket.on('playerFinishedStatus', (data) => {
+        if (data.playerName !== myName) {
+            showToast(`השחקן ${data.playerName} סיים!`);
+        }
+
+        if (isHost) {
+            const hostUpdates = document.getElementById('host-updates');
+            const forceBtn = document.getElementById('force-end-btn');
+            
+            if (data.waitingFor.length > 0) {
+                hostUpdates.style.display = 'block';
+                forceBtn.style.display = 'block';
+                document.getElementById('host-updates-list').innerText = `שחקנים שסיימו: ${data.submittedCount}/${data.totalPlayers}\nממתין ל: ${data.waitingFor.join(', ')}`;
+            } else {
+                forceBtn.style.display = 'none'; 
+            }
+        }
+    });
+
+    function forceEndGame() {
+        if (!confirm('האם אתה בטוח שברצונך לסיים את המשחק עכשיו לכולם?')) return;
+        socket.emit('forceEndGame', { roomId: currentRoom, forceHostSubmit: false });
+    }
+
+    // ==========================================
+    // הצגת סיכום משחקים מלא ושליחת מייל סמויה
+    // ==========================================
+    function endSessionAndShowSummary() {
+        // שליחת המייל בשקט מוחלט! בלי פופ-אפ, בלי לשנות כפתור
+        sendCumulativeEmailSilently();
+        
+        // מעבר למסך הסיכום
+        if (isMultiplayerMode) {
+            // טריק: שימוש בערוץ פנוי בשרת כדי לפקוד על כל שאר השחקנים לעבור למסך הסיכום
+            socket.emit('announceFinish', { roomId: currentRoom, playerName: 'SHOW_SUMMARY_COMMAND' });
+        }
+        displayCumulativeSummary();
+    }
+
+    // האזנה לפקודת ה"טריק" מהמארח להצגת הסיכום אצל כולם
+    socket.on('playerAnnouncedFinish', (command) => {
+        if (command === 'SHOW_SUMMARY_COMMAND') {
+            displayCumulativeSummary();
+        }
+    });
+
+    function displayCumulativeSummary() {
+        showScreen('summary-screen');
+        let html = '';
+        window.gameSessionHistory.forEach((game, idx) => {
+            html += `<div class="summary-box">
+                        <h3 dir="rtl">משחק ${idx + 1} (אות ${game.letter}) - מנצח: ${game.leaderboard[0].name}</h3>
+                        <table class="leaderboard-table" style="font-size: 0.9rem;">
+                            <tr><th>מקום</th><th>שחקן</th><th>ניקוד</th></tr>`;
+            game.leaderboard.forEach((p, i) => {
+                const finalSc = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+                html += `<tr><td>${i+1}</td><td>${p.name}</td><td style="color:green; font-weight:bold;">${finalSc}</td></tr>`;
+            });
+            html += `</table></div>`;
+        });
+        document.getElementById('summary-content').innerHTML = html;
+    }
+
+    function sendCumulativeEmailSilently() {
+        if (window.gameSessionHistory.length === 0) return;
+        
+        let emailHtml = `<h2 style="color:#4a90e2; text-align:right;" dir="rtl">סיכום מפגש ארץ עיר (${window.gameSessionHistory.length} משחקים)</h2>`;
+        
+        window.gameSessionHistory.forEach((game, index) => {
+            emailHtml += `<hr style="margin: 20px 0;">`;
+            emailHtml += `<h3 style="color:#f5a623; text-align:right;" dir="rtl">משחק ${index + 1} - אות: ${game.letter} (מנצח/ת: ${game.leaderboard[0].name})</h3>`;
+            
+            emailHtml += `<table border="1" cellpadding="5" cellspacing="0" style="width:100%; max-width:600px; text-align:right; border-collapse:collapse;" dir="rtl">
+                            <tr style="background-color:#4a90e2; color:white;"><th>מקום</th><th>שחקן</th><th>ניקוד</th><th>זמן</th></tr>`;
+            game.leaderboard.forEach((p, idx) => {
+                const finalSc = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+                emailHtml += `<tr><td>${idx + 1}</td><td><strong>${p.name}</strong></td><td style="color:green; font-weight:bold;">${finalSc}</td><td>${p.time === 999 ? 'פרש' : p.time}</td></tr>`;
+            });
+            emailHtml += `</table><br>`;
+
+            game.leaderboard.forEach(p => {
+                emailHtml += `<h4 style="margin-bottom: 5px; text-align: right;" dir="rtl">התשובות של: <span style="color:#8e44ad">${p.name}</span></h4>`;
+                emailHtml += `<table border="1" cellpadding="5" cellspacing="0" style="width:100%; max-width:600px; text-align:right; border-collapse:collapse; font-size:0.9rem;" dir="rtl">
+                                <tr style="background-color:#f9f9f9;"><th>קטגוריה</th><th>תשובה</th><th>ניקוד</th><th>הערה</th></tr>`;
+                
+                if (p.answers && Object.keys(p.answers).length > 0) {
+                    game.activeCategories.forEach(cat => {
+                        let ans = p.answers[cat.label];
+                        if (ans) {
+                            let fdbk = ans.feedback || '';
+                            emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>${ans.val}</td><td style="color:green; font-weight:bold;">${ans.points}</td><td style="color:#666;">${fdbk}</td></tr>`;
+                        } else {
+                            emailHtml += `<tr><td><strong>${cat.label}</strong></td><td>-</td><td>0</td><td></td></tr>`;
+                        }
+                    });
+                } else {
+                    emailHtml += `<tr><td colspan="4">לא הוגשו תשובות (פרש/נגמר הזמן)</td></tr>`;
+                }
+                emailHtml += `</table><br>`;
+            });
+        });
+
+        // שיגור הפקודה ל-EmailJS מבלי לעדכן את המסך ומבלי להקפיץ חלונית!
+        emailjs.send("service_84tw6fs", "template_a1o8lid", { 
+            letter: "סיכום מפגש", 
+            winner_name: "ראו דוח מצורף", 
+            results_table: emailHtml 
+        }).then(() => console.log('הדוח נשלח בהצלחה למארח בשקט.')).catch(e => console.log('שגיאת שליחה', e));
+    }
+
+    socket.on('gameOver', (leaderboard) => {
+        let myData = leaderboard.find(p => p.name === myName);
+        showFinalResults(leaderboard, myData || { name: myName, answers: playerAnswers });
+    });
+
+    function showFinalResults(leaderboard, myData) {
+        window.gameSessionHistory.push({ letter: currentLetter, leaderboard: leaderboard, activeCategories: activeCategories });
+
+        showScreen('results');
+        
+        const winnerNameText = leaderboard.length > 1 ? `המנצח הוא ${leaderboard[0].name}!` : `סיימת!`;
+        document.getElementById('winner-announcement').innerText = winnerNameText;
+        
+        // הפעלת הדיבור (TTS) - המחשב יקריא את המנצח!
+        if (leaderboard.length > 1) {
+            announceWinner(leaderboard[0].name);
+        }
+
+        const lb = document.getElementById('leaderboard-body'); lb.innerHTML = '';
+        leaderboard.forEach((p, i) => { 
+            let dispScore = p.finalScore !== undefined ? formatScore(p.finalScore) : formatScore(p.score || 0);
+            lb.innerHTML += `<tr><td>${i+1}</td><td>${p.name}</td><td>${dispScore}</td><td>${p.time === 999 ? 'פרש' : p.time + " שנ'"}</td></tr>`; 
+        });
+        
+        const comp = document.getElementById('answers-comparison-container');
+        let tableHtml = `<table class="leaderboard-table comparison-table"><thead><tr><th>קטגוריה</th><th>התשובה שלי</th>`;
+        leaderboard.filter(p => p.name !== myName).forEach(p => tableHtml += `<th>${p.name}</th>`);
+        tableHtml += `</tr></thead><tbody>`;
+        
+        activeCategories.forEach(cat => {
+            let myAns = myData.answers[cat.label];
+            tableHtml += `<tr><td style="font-weight:bold">${cat.label}</td><td>${myAns ? myAns.val : '-'}<br><small>${myAns ? myAns.points : 0} נק' <br><span style="color:#8e44ad">${myAns && myAns.feedback ? '('+myAns.feedback+')' : ''}</span></small></td>`;
+            leaderboard.filter(p => p.name !== myName).forEach(p => {
+                let ta = p.answers ? p.answers[cat.label] : null;
+                tableHtml += `<td>${ta?ta.val:'-'}<br><small>${ta?ta.points:0} נק'</small></td>`;
+            });
+            tableHtml += `</tr>`;
+        });
+        comp.innerHTML = tableHtml + `</tbody></table>`;
+        
+        // הצגת כפתור "סיום והצגת התוצאות" רק למארח או בשחקן יחיד
+        const btnEnd = document.getElementById('btn-end-session');
+        if (isHost || !isMultiplayerMode) {
+            btnEnd.style.display = 'block';
+        } else {
+            btnEnd.style.display = 'none';
+        }
+    }
+
+    function playAgainInSameRoom() { 
+        if (isMultiplayerMode) {
+            socket.emit('backToLobby', currentRoom); 
+        } else {
+            // טיפול במשחק יחיד - מעבר ישיר למשחק הבא מבלי לרענן את הדף (שומר על ההיסטוריה!)
+            currentLetter = "אבגדהזחטיכלמנסעפצקרשת"[Math.floor(Math.random() * 22)];
+            startCountdownSequence();
+        }
+    }
+    
+    socket.on('returnToLobby', (data) => { 
+        currentLetter = data.letter; 
+        showScreen('lobby'); 
+        updatePlayersList(data.players); 
+    });
+</script>
 </body>
 </html>
